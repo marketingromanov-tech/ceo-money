@@ -14,6 +14,7 @@ class InvestmentLot extends Model
 
     protected $fillable = [
         'investment_account_id',
+        'deposit_request_id',
         'investment_program_id',
         'investment_program_name_snapshot',
         'investment_program_version_snapshot',
@@ -44,6 +45,11 @@ class InvestmentLot extends Model
     public function investmentAccount(): BelongsTo
     {
         return $this->belongsTo(InvestmentAccount::class);
+    }
+
+    public function depositRequest(): BelongsTo
+    {
+        return $this->belongsTo(DepositRequest::class);
     }
 
     public function investmentProgram(): BelongsTo

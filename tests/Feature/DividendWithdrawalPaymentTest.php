@@ -11,6 +11,8 @@ use App\Models\User;
 use App\Models\WithdrawalRequest;
 use App\Services\AvailableBalanceService;
 use App\Services\DividendWithdrawalService;
+use App\Services\WithdrawalVerificationService;
+use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -30,6 +32,7 @@ class DividendWithdrawalPaymentTest extends TestCase
             'status' => 'approved', 'requested_at' => now(), 'approved_at' => now(),
         ]);
         $service = app(DividendWithdrawalService::class);
+        $this->completeVerification($request);
 
         $first = $service->pay($request, txid: 'dividend-tx');
         $second = $service->pay($request);
@@ -46,6 +49,82 @@ class DividendWithdrawalPaymentTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action' => 'withdrawal.dividend_paid', 'entity_id' => $request->id]);
         $this->assertSame('60.00000000', app(AvailableBalanceService::class)->availableDividendBalance($account));
         $this->assertDatabaseCount('daily_accruals', 1);
+    }
+
+    public function test_payment_rejects_non_admin_and_inactive_admin_actors(): void
+    {
+        [$account, $investor] = $this->context();
+        $request = WithdrawalRequest::create([
+            'investor_id' => $investor->id, 'investment_account_id' => $account->id,
+            'type' => 'dividend', 'requested_amount' => '40.00000000', 'reserved_amount' => '40.00000000',
+            'fee_amount' => '0.00000000', 'net_amount' => '40.00000000', 'currency' => 'USDT',
+            'wallet_address_snapshot' => 'wallet-1', 'network_snapshot' => 'TRC20',
+            'status' => 'approved', 'requested_at' => now(), 'approved_at' => now(),
+        ]);
+        $this->completeVerification($request);
+
+        foreach ([
+            User::factory()->create(['role' => 'investor', 'is_active' => true]),
+            User::factory()->create(['role' => 'admin', 'is_active' => false]),
+        ] as $actor) {
+            try {
+                app(DividendWithdrawalService::class)->pay($request, $actor);
+                $this->fail('Invalid actor must not pay a dividend withdrawal.');
+            } catch (DomainException) {
+                $this->assertSame('approved', $request->fresh()->status);
+            }
+        }
+
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        app(DividendWithdrawalService::class)->pay($request, $admin);
+        $this->assertSame('paid', $request->fresh()->status);
+    }
+
+    public function test_incomplete_verification_blocks_payment_without_financial_effects(): void
+    {
+        [$account, $investor] = $this->context();
+        $request = WithdrawalRequest::create([
+            'investor_id' => $investor->id, 'investment_account_id' => $account->id,
+            'type' => 'dividend', 'requested_amount' => '40.00000000', 'reserved_amount' => '40.00000000',
+            'fee_amount' => '0.00000000', 'net_amount' => '40.00000000', 'currency' => 'USDT',
+            'wallet_address_snapshot' => 'wallet-1', 'network_snapshot' => 'TRC20',
+            'status' => 'approved', 'requested_at' => now(), 'approved_at' => now(),
+        ]);
+
+        $this->expectException(DomainException::class);
+        try {
+            app(DividendWithdrawalService::class)->pay($request, txid: 'unverified-tx');
+        } finally {
+            $this->assertDatabaseCount('dividend_payments', 0);
+            $this->assertSame('approved', $request->fresh()->status);
+        }
+    }
+
+    public function test_txid_is_normalized_and_duplicate_is_rejected(): void
+    {
+        [$account, $investor] = $this->context();
+        $makeRequest = fn () => WithdrawalRequest::create([
+            'investor_id' => $investor->id, 'investment_account_id' => $account->id,
+            'type' => 'dividend', 'requested_amount' => '20.00000000', 'reserved_amount' => '20.00000000',
+            'fee_amount' => '0.00000000', 'net_amount' => '20.00000000', 'currency' => 'USDT',
+            'wallet_address_snapshot' => 'wallet-1', 'network_snapshot' => 'TRC20',
+            'status' => 'approved', 'requested_at' => now(), 'approved_at' => now(),
+        ]);
+        $first = $makeRequest();
+        $this->completeVerification($first);
+        app(DividendWithdrawalService::class)->pay($first, txid: '  AbC-123  ');
+        $this->assertSame('abc-123', $first->fresh()->txid);
+
+        $second = $makeRequest();
+        $this->completeVerification($second);
+        try {
+            app(DividendWithdrawalService::class)->pay($second, txid: 'ABC-123');
+            $this->fail('Duplicate withdrawal TXID must be rejected.');
+        } catch (DomainException $exception) {
+            $this->assertStringContainsString('TXID', $exception->getMessage());
+            $this->assertSame('approved', $second->fresh()->status);
+            $this->assertDatabaseCount('dividend_payments', 1);
+        }
     }
 
     private function context(): array
@@ -66,5 +145,15 @@ class DividendWithdrawalPaymentTest extends TestCase
         ]);
 
         return [$account, $investor, $lot];
+    }
+
+    private function completeVerification(WithdrawalRequest $request): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        $verification = app(WithdrawalVerificationService::class);
+        $verification->initializeForRequest($request);
+        foreach (WithdrawalVerificationService::MANUAL_KEYS as $key) {
+            $verification->markPassed($request, $key, $admin);
+        }
     }
 }

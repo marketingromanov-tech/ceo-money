@@ -13,6 +13,7 @@ class SupportTicketService
 
     public function create(Investor $investor,User $actor,string $category,string $subject,string $message,string $priority='normal',?string $relatedType=null,?int $relatedId=null):SupportTicket
     {
+        app(AuthenticatedMutationLimiter::class)->hit('support-ticket', $actor);
         $this->assertActor($investor,$actor); $this->assertValue($category,SupportTicket::CATEGORIES,'category');
         $allowed=$actor->role==='admin'?SupportTicket::PRIORITIES:SupportTicket::INVESTOR_PRIORITIES; $this->assertValue($priority,$allowed,'priority');
         if(trim($subject)===''||mb_strlen($subject)>255||trim($message)==='')throw new DomainException('Subject and message are required.');
@@ -26,6 +27,7 @@ class SupportTicketService
     }
     public function reply(SupportTicket $ticket,User $actor,string $message):SupportMessage
     {
+        app(AuthenticatedMutationLimiter::class)->hit('support-message', $actor);
         $this->assertActor($ticket->investor,$actor); if($ticket->status==='closed')throw new DomainException('Closed ticket cannot receive replies.');
         if(trim($message)==='')throw new DomainException('Message is required.');
         return DB::transaction(function()use($ticket,$actor,$message){$ticket=SupportTicket::lockForUpdate()->findOrFail($ticket->id);$old=$ticket->status;$status=$actor->role==='investor'&&in_array($old,['waiting_investor','resolved'],true)?'open':$old;$item=SupportMessage::create(['support_ticket_id'=>$ticket->id,'user_id'=>$actor->id,'message'=>trim($message),'is_internal'=>false]);$ticket->update(['status'=>$status,'last_message_at'=>now(),'resolved_at'=>$status==='resolved'?$ticket->resolved_at:null]);$this->auditMessage($ticket,$item,$actor,false);if($status!==$old)$this->auditStatus($ticket,$actor,$old,$status);return $item;});

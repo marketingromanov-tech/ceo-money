@@ -20,6 +20,7 @@ class InvestmentTermService
         array $conditions,
         User $admin,
     ): InvestmentTerm {
+        app(RecentAdminAuthentication::class)->assert($admin);
         if ($admin->role !== 'admin' || ! $admin->is_active) {
             throw new DomainException('Only an active administrator may change investment terms.');
         }

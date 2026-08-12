@@ -71,10 +71,15 @@ class WithdrawalVerificationService
 
     public function assertReadyForPayout(WithdrawalRequest $request): void
     {
-        $request->refresh();
-        if ($request->status !== 'approved') throw new DomainException('Выплата доступна только для одобренной заявки.');
-        $this->refreshSystemChecks($request);
-        if (! $this->allRequiredPassed($request)) throw new DomainException('Завершите все обязательные пункты проверки выплаты.');
+        DB::transaction(function () use ($request) {
+            $request = WithdrawalRequest::query()->lockForUpdate()->findOrFail($request->id);
+            $this->ensureInitialized($request);
+            $request->verificationChecks()->lockForUpdate()->get();
+            $request->refresh();
+            if ($request->status !== 'approved') throw new DomainException('Выплата доступна только для одобренной заявки.');
+            $this->refreshSystemChecks($request);
+            if (! $this->allRequiredPassed($request)) throw new DomainException('Завершите все обязательные пункты проверки выплаты.');
+        });
     }
 
     public function summary(WithdrawalRequest $request): array

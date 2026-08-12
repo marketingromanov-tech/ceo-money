@@ -33,7 +33,15 @@ class FinancialOperationReadinessService
             if ($checks->firstWhere('check_key', $key)?->status !== 'passed') return ['ready' => false, 'reason' => 'Не пройдена проверка: '.WithdrawalVerificationPresentation::label($key)];
         }
         if ($request->status !== 'approved') return ['ready' => false, 'reason' => 'Заявка проверена, но ещё не одобрена'];
-        if (! $request->investorWallet || $request->investorWallet->status !== 'approved') return ['ready' => false, 'reason' => 'Кошелёк инвестора не одобрен'];
+        $legacyWalletReady = $request->investorWallet?->status === 'approved';
+        $permanentDetailsReady = $request->investor->withdrawalDetails()
+            ->where('is_active', true)
+            ->where('currency', $request->currency)
+            ->where('network', $request->network_snapshot)
+            ->where('address', $request->wallet_address_snapshot)
+            ->exists();
+
+        if (! $legacyWalletReady && ! $permanentDetailsReady) return ['ready' => false, 'reason' => 'Реквизиты для вывода не назначены'];
 
         return ['ready' => true, 'reason' => null];
     }

@@ -107,6 +107,42 @@ class WithdrawalRequestServiceTest extends TestCase
         $this->assertSame('100.00000000', $lot->fresh()->remaining_amount);
     }
 
+    public function test_capital_reservation_is_recalculated_inside_each_locked_transaction(): void
+    {
+        [$account] = $this->context();
+        $this->lot($account, ['remaining_amount' => '100.00000000', 'unlock_date' => null]);
+        $service = app(WithdrawalRequestService::class);
+
+        $service->createCapitalRequest($account, '70.00000000', date: Carbon::parse('2026-08-10'));
+
+        try {
+            $service->createCapitalRequest($account, '40.00000000', date: Carbon::parse('2026-08-10'));
+            $this->fail('The second reservation must use the balance after the first reservation.');
+        } catch (DomainException) {
+            $this->assertDatabaseCount('withdrawal_requests', 1);
+            $this->assertSame('70.00000000', WithdrawalRequest::sum('reserved_amount'));
+            $this->assertSame('30.00000000', app(AvailableBalanceService::class)
+                ->availableCapitalForWithdrawal($account, Carbon::parse('2026-08-10')));
+        }
+    }
+
+    public function test_replayed_full_capital_request_cannot_over_reserve(): void
+    {
+        [$account] = $this->context();
+        $this->lot($account, ['remaining_amount' => '100.00000000', 'unlock_date' => null]);
+        $service = app(WithdrawalRequestService::class);
+
+        $service->createCapitalRequest($account, '100.00000000', date: Carbon::parse('2026-08-10'));
+
+        $this->expectException(DomainException::class);
+        try {
+            $service->createCapitalRequest($account, '100.00000000', date: Carbon::parse('2026-08-10'));
+        } finally {
+            $this->assertDatabaseCount('withdrawal_requests', 1);
+            $this->assertSame('100.00000000', WithdrawalRequest::sum('reserved_amount'));
+        }
+    }
+
     public function test_minimum_balance_is_enforced(): void
     {
         [$account] = $this->context();

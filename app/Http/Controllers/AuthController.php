@@ -27,6 +27,12 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
+        if (Auth::user()->role === 'admin' && Auth::user()->mfa_enabled_at) {
+            $request->session()->put(['mfa_login_user_id' => Auth::id(), 'mfa_login_remember' => $request->boolean('remember')]);
+            Auth::logout();
+            return redirect()->route('mfa.challenge');
+        }
+
         return redirect()->intended(Auth::user()->role === 'admin' ? route('admin.dashboard') : route('dashboard'));
     }
 

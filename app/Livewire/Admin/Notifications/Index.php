@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin\Notifications;
 
+use App\Support\AdminNotificationTarget;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -22,7 +23,7 @@ class Index extends Component
         $this->authorizeAdmin();
         $notification = auth()->user()->notifications()->whereKey($notificationId)->firstOrFail();
         $notification->markAsRead();
-        return $this->redirect($notification->data['target'] ?? route('admin.notifications.index'), navigate: true);
+        return $this->redirect(AdminNotificationTarget::resolve($notification->data), navigate: true);
     }
 
     public function render()

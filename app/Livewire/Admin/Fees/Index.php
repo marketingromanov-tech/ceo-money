@@ -13,11 +13,12 @@ use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
+use App\Livewire\Concerns\RequiresRecentAdminAuthentication;
 
 #[Layout('layouts.admin')]
 class Index extends Component
 {
-    use WithPagination;
+    use WithPagination, RequiresRecentAdminAuthentication;
 
     public string $operationFilter=''; public string $scopeFilter=''; public string $statusFilter=''; public string $investorFilter=''; public string $currencyFilter=''; public string $search='';
     public bool $showModal=false; public ?int $editingId=null;
@@ -37,6 +38,7 @@ class Index extends Component
 
     public function save(AuditLogService $audit, AccrualCalculator $decimal): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $data=$this->validateEditor($decimal); $rule=$this->editingId ? FeeRule::findOrFail($this->editingId) : new FeeRule(); $old=$rule->exists?$rule->getAttributes():null;
         $rule->fill($data); if(!$rule->exists)$rule->created_by=auth()->id(); $rule->save();
         $audit->log($old?'fee_rule_updated':'fee_rule_created',$rule,auth()->user(),$old,$rule->getAttributes());
@@ -45,6 +47,7 @@ class Index extends Component
 
     public function toggle(int $id, AuditLogService $audit): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $rule=FeeRule::findOrFail($id); $old=['is_active'=>$rule->is_active]; $rule->update(['is_active'=>!$rule->is_active]);
         $audit->log($rule->is_active?'fee_rule_activated':'fee_rule_deactivated',$rule,auth()->user(),$old,['is_active'=>$rule->is_active]);
     }

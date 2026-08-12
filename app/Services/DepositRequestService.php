@@ -133,6 +133,7 @@ class DepositRequestService
 
     public function markPaymentSubmitted(DepositRequest $request, User $actor): DepositRequest
     {
+        app(AuthenticatedMutationLimiter::class)->hit('mark-paid', $actor);
         return DB::transaction(function () use ($request, $actor) {
             $request = DepositRequest::query()->lockForUpdate()->findOrFail($request->id);
             if ($request->status === 'payment_submitted') return $request;
@@ -159,6 +160,7 @@ class DepositRequestService
         ?User $actor = null,
         ?InvestmentProgram $program = null,
     ): DepositRequest {
+        app(AuthenticatedMutationLimiter::class)->hit('deposit', $actor);
         $programVersion = null;
         if ($program !== null) {
             app(InvestmentProgramService::class)->assertAmount($program, $amount, $account->currency);
@@ -246,14 +248,6 @@ class DepositRequestService
         ?Carbon $unlockDate = null,
         ?InvestmentProgram $program = null,
     ): DepositRequest {
-        if ($request->status !== 'confirmed') {
-            $verification = app(DepositVerificationService::class);
-            $verification->refreshSystemChecks($request);
-            if (! $verification->allRequiredPassed($request)) {
-                throw new DomainException('Не завершена обязательная проверка поступления.');
-            }
-        }
-
         return DB::transaction(function () use (
             $request, $confirmedBy, $monthlyRate, $lockMonths, $accrualStartDate, $unlockDate, $program,
         ) {
@@ -266,6 +260,9 @@ class DepositRequestService
             if ($request->status !== 'submitted') {
                 throw new DomainException('This deposit request cannot be confirmed.');
             }
+
+            app(DepositVerificationService::class)->assertReadyForConfirmation($request);
+            app(RecentAdminAuthentication::class)->assert($confirmedBy);
 
             $oldStatus = $request->status;
             $date = Carbon::today();
@@ -306,6 +303,7 @@ class DepositRequestService
             $unlockDate ??= $lockMonths > 0 ? $accrualStartDate->copy()->addMonthsNoOverflow($lockMonths) : null;
             $lot = InvestmentLot::create([
                 'investment_account_id' => $request->investment_account_id,
+                'deposit_request_id' => $request->id,
                 'original_amount' => $fee['net_amount'],
                 'remaining_amount' => $fee['net_amount'],
                 'currency' => $request->currency,
@@ -323,6 +321,7 @@ class DepositRequestService
             $transaction = InvestmentTransaction::create([
                 'investment_account_id' => $request->investment_account_id,
                 'investment_lot_id' => $lot->id,
+                'deposit_request_id' => $request->id,
                 'type' => 'deposit',
                 'amount' => $fee['net_amount'],
                 'currency' => $request->currency,

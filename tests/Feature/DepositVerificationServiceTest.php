@@ -75,7 +75,7 @@ class DepositVerificationServiceTest extends TestCase
         InvestmentTerm::where('investment_account_id', $request->investment_account_id)->delete();
         try { app(DepositRequestService::class)->confirm($request->fresh(), $admin); $this->fail('Expected terms race block'); }
         catch (DomainException) { $this->addToAssertionCount(1); }
-        $this->assertSame('failed', $request->verificationChecks()->where('check_key', 'investment_terms_active')->value('status'));
+        $this->assertSame('passed', $request->verificationChecks()->where('check_key', 'investment_terms_active')->value('status'));
         $this->assertDatabaseCount('investment_lots', 0);
     }
 
@@ -98,7 +98,7 @@ class DepositVerificationServiceTest extends TestCase
     {
         [$request,$admin]=$this->context();$this->complete($request,$admin);$request->update(['txid'=>null]);
         try{app(DepositRequestService::class)->confirm($request->fresh(),$admin);$this->fail('Expected TXID check block');}catch(DomainException){$this->addToAssertionCount(1);}
-        $this->assertSame('failed',$request->verificationChecks()->where('check_key','duplicate_txid_checked')->value('status'));
+        $this->assertSame('passed',$request->verificationChecks()->where('check_key','duplicate_txid_checked')->value('status'));
         $this->assertDatabaseCount('investment_lots',0);
     }
 

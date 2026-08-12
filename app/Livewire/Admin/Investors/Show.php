@@ -19,10 +19,12 @@ use Carbon\Carbon;
 use DomainException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use App\Livewire\Concerns\RequiresRecentAdminAuthentication;
 
 #[Layout('layouts.admin')]
 class Show extends Component
 {
+    use RequiresRecentAdminAuthentication;
     public Investor $investor;
     public string $activeTab = 'overview';
     public string $selectedMonth;
@@ -78,6 +80,7 @@ class Show extends Component
 
     public function savePaymentDetail(): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $data=$this->validate(['paymentCurrency'=>['required','string','max:16'],'paymentNetwork'=>['required','string','max:50'],'paymentAddress'=>['required','string','max:255'],'paymentMemo'=>['nullable','string','max:255'],'paymentIsActive'=>['boolean']]);
         $values=['currency'=>mb_strtoupper(trim($data['paymentCurrency'])),'network'=>trim($data['paymentNetwork']),'address'=>trim($data['paymentAddress']),'memo'=>filled($data['paymentMemo'])?trim($data['paymentMemo']):null,'is_active'=>$data['paymentIsActive']];
         if($this->selectedPaymentDetailId)$this->investor->paymentDetails()->whereKey($this->selectedPaymentDetailId)->firstOrFail()->update($values);else$this->investor->paymentDetails()->create($values);
@@ -86,6 +89,7 @@ class Show extends Component
 
     public function togglePaymentDetail(int $id): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $detail=$this->investor->paymentDetails()->whereKey($id)->firstOrFail();$detail->update(['is_active'=>!$detail->is_active]);
     }
 
@@ -121,6 +125,7 @@ class Show extends Component
 
     public function saveWithdrawalDetail(): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $data = $this->validate([
             'withdrawalDetailCurrency' => ['required', 'string', 'max:16'],
             'withdrawalDetailNetwork' => ['required', 'string', 'max:50'],
@@ -148,12 +153,14 @@ class Show extends Component
 
     public function toggleWithdrawalDetail(int $id): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $detail = $this->investor->withdrawalDetails()->whereKey($id)->firstOrFail();
         $detail->update(['is_active' => ! $detail->is_active]);
     }
 
     public function useWalletForWithdrawal(int $walletId, InvestorWithdrawalDetailService $service): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $this->walletConversionMessage = null;
         $wallet = $this->investor->wallets()->whereKey($walletId)->firstOrFail();
 
@@ -194,6 +201,7 @@ class Show extends Component
 
     public function saveTerms(InvestmentTermService $service): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $data = $this->validate([
             'termMonthlyRate' => ['required', 'regex:/^\d{1,4}(?:\.\d{1,4})?$/'],
             'termLockMonths' => ['required', 'integer', 'min:0'],

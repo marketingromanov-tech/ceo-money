@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Admin\Notifications;
 
+use App\Support\AdminNotificationTarget;
 use Livewire\Component;
 
 class Dropdown extends Component
@@ -18,7 +19,7 @@ class Dropdown extends Component
         $notification = auth()->user()->notifications()->whereKey($notificationId)->firstOrFail();
         $notification->markAsRead();
 
-        return $this->redirect($notification->data['target'] ?? route('admin.notifications.index'), navigate: true);
+        return $this->redirect(AdminNotificationTarget::resolve($notification->data), navigate: true);
     }
 
     public function render()

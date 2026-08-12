@@ -22,6 +22,8 @@ class Wallets extends Component
 
     public function add(): void
     {
+        try { app(\App\Services\AuthenticatedMutationLimiter::class)->hit('wallet', auth()->user()); }
+        catch (\DomainException $exception) { $this->addError('address', $exception->getMessage()); return; }
         $investor = $this->investor();
         $data = $this->validate([
             'currency' => ['required', 'string', 'max:20'],

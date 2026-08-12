@@ -48,4 +48,5 @@ class WithdrawalRequest extends Model
     public function capitalWithdrawalAllocations(): HasMany { return $this->hasMany(CapitalWithdrawalAllocation::class); }
     public function investorWallet(): BelongsTo { return $this->belongsTo(InvestorWallet::class); }
     public function verificationChecks(): HasMany { return $this->hasMany(WithdrawalVerificationCheck::class); }
+    public function investmentTransaction(): HasOne { return $this->hasOne(InvestmentTransaction::class); }
 }

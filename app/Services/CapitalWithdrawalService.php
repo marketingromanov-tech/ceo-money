@@ -7,8 +7,10 @@ use App\Models\InvestmentTerm;
 use App\Models\InvestmentTransaction;
 use App\Models\User;
 use App\Models\WithdrawalRequest;
+use App\Support\WithdrawalTxid;
 use Carbon\Carbon;
 use DomainException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 class CapitalWithdrawalService
@@ -16,13 +18,18 @@ class CapitalWithdrawalService
     public function __construct(
         private readonly AccrualCalculator $decimal,
         private readonly AuditLogService $audit,
+        private readonly WithdrawalVerificationService $verification,
+        private readonly RecentAdminAuthentication $recentAuth,
     ) {
     }
 
     public function pay(WithdrawalRequest $request, ?User $admin = null, ?string $txid = null): WithdrawalRequest
     {
-        return DB::transaction(function () use ($request, $admin, $txid) {
-            $request = WithdrawalRequest::query()->lockForUpdate()->findOrFail($request->id);
+        $txid = WithdrawalTxid::normalize($txid);
+
+        try {
+            return DB::transaction(function () use ($request, $admin, $txid) {
+                $request = WithdrawalRequest::query()->lockForUpdate()->findOrFail($request->id);
 
             if ($request->status === 'paid') {
                 return $request;
@@ -31,6 +38,15 @@ class CapitalWithdrawalService
             if ($request->type !== 'capital' || $request->status !== 'approved') {
                 throw new DomainException('Only an approved capital withdrawal can be paid.');
             }
+
+            $this->verification->assertReadyForPayout($request);
+            $this->recentAuth->assert($admin);
+
+            if ($admin !== null && ! User::query()->whereKey($admin->id)->where('role', 'admin')->where('is_active', true)->exists()) {
+                throw new DomainException('Only an active administrator can pay withdrawals.');
+            }
+
+            $this->assertUniqueTxid($txid, $request->id);
 
             $paidAt = Carbon::now();
             $lots = $request->investmentAccount->investmentLots()
@@ -87,6 +103,7 @@ class CapitalWithdrawalService
 
             InvestmentTransaction::create([
                 'investment_account_id' => $request->investment_account_id,
+                'withdrawal_request_id' => $request->id,
                 'type' => 'withdrawal',
                 'amount' => $request->requested_amount,
                 'currency' => $request->currency,
@@ -106,8 +123,22 @@ class CapitalWithdrawalService
                 'status' => 'paid', 'requested_amount' => $request->requested_amount, 'txid' => $txid,
             ]);
 
-            return $request;
-        });
+                return $request;
+            });
+        } catch (QueryException $exception) {
+            if ($txid !== null && WithdrawalRequest::query()->where('txid', $txid)->whereKeyNot($request->id)->exists()) {
+                throw new DomainException('Выплата с таким TXID уже зарегистрирована.', previous: $exception);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function assertUniqueTxid(?string $txid, int $requestId): void
+    {
+        if ($txid !== null && WithdrawalRequest::query()->where('txid', $txid)->whereKeyNot($requestId)->exists()) {
+            throw new DomainException('Выплата с таким TXID уже зарегистрирована.');
+        }
     }
 
     private function accountTerm(WithdrawalRequest $request, Carbon $date): ?InvestmentTerm

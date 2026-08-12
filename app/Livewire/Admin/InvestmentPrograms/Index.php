@@ -12,11 +12,12 @@ use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
+use App\Livewire\Concerns\RequiresRecentAdminAuthentication;
 
 #[Layout('layouts.admin')]
 class Index extends Component
 {
-    use WithPagination;
+    use WithPagination, RequiresRecentAdminAuthentication;
 
     public ?int $editingId = null;
     public string $name = '', $description = '', $currency = 'USDT', $minAmount = '', $maxAmount = '', $status = 'draft', $monthlyRate = '', $lockMonths = '0', $validFrom = '';
@@ -27,6 +28,7 @@ class Index extends Component
 
     public function save(InvestmentProgramService $service, AuditLogService $audit): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         $data=$this->validate(['name'=>'required|string|max:120','description'=>'nullable|string|max:2000','currency'=>'required|string|max:12','minAmount'=>'required|decimal:0,8|min:0.00000001','maxAmount'=>'nullable|decimal:0,8|gt:minAmount','status'=>['required',Rule::in(['draft','active','paused','archived'])],'partialWithdrawal'=>'boolean','monthlyRate'=>'required|decimal:0,4|min:0','lockMonths'=>'required|integer|min:0','validFrom'=>$this->editingId?'required|date|after_or_equal:today':'required|date']);
         if (in_array($data['status'], ['active', 'paused'], true)) {
             $overlap = InvestmentProgram::query()->where('currency', $data['currency'])->whereIn('status', ['active', 'paused'])
@@ -41,8 +43,8 @@ class Index extends Component
     }
 
     public function addVersion(int $id): void {$this->editingId=$id;$this->monthlyRate='';$this->lockMonths='0';$this->validFrom=now()->addDay()->toDateString();$this->dispatch('open-version-form');}
-    public function saveVersion(InvestmentProgramService $service): void {$data=$this->validate(['monthlyRate'=>'required|decimal:0,4|min:0','lockMonths'=>'required|integer|min:0','validFrom'=>'required|date']);$service->createVersion(InvestmentProgram::findOrFail($this->editingId),$data['monthlyRate'],(int)$data['lockMonths'],Carbon::parse($data['validFrom']),auth()->user());$this->dispatch('close-version-form');}
-    public function archive(int $id, AuditLogService $audit): void {$p=InvestmentProgram::findOrFail($id);$old=['status'=>$p->status];$p->update(['status'=>'archived']);$audit->log('investment_program.archived',$p,auth()->user(),$old,['program_id'=>$p->id,'status'=>'archived']);}
+    public function saveVersion(InvestmentProgramService $service): void {if (! $this->requireRecentAdminAuthentication()) return;$data=$this->validate(['monthlyRate'=>'required|decimal:0,4|min:0','lockMonths'=>'required|integer|min:0','validFrom'=>'required|date']);$service->createVersion(InvestmentProgram::findOrFail($this->editingId),$data['monthlyRate'],(int)$data['lockMonths'],Carbon::parse($data['validFrom']),auth()->user());$this->dispatch('close-version-form');}
+    public function archive(int $id, AuditLogService $audit): void {if (! $this->requireRecentAdminAuthentication()) return;$p=InvestmentProgram::findOrFail($id);$old=['status'=>$p->status];$p->update(['status'=>'archived']);$audit->log('investment_program.archived',$p,auth()->user(),$old,['program_id'=>$p->id,'status'=>'archived']);}
 
     public function render()
     {

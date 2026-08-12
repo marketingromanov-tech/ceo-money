@@ -15,6 +15,8 @@ class InvestmentTransaction extends Model
     protected $fillable = [
         'investment_account_id',
         'investment_lot_id',
+        'deposit_request_id',
+        'withdrawal_request_id',
         'type',
         'amount',
         'currency',
@@ -44,6 +46,16 @@ class InvestmentTransaction extends Model
     public function investmentLot(): BelongsTo
     {
         return $this->belongsTo(InvestmentLot::class);
+    }
+
+    public function depositRequest(): BelongsTo
+    {
+        return $this->belongsTo(DepositRequest::class);
+    }
+
+    public function withdrawalRequest(): BelongsTo
+    {
+        return $this->belongsTo(WithdrawalRequest::class);
     }
 
     public function creator(): BelongsTo

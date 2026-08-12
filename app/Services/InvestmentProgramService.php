@@ -31,11 +31,13 @@ class InvestmentProgramService
 
     public function createVersion(InvestmentProgram $program, string $rate, int $months, Carbon $validFrom, ?User $actor): InvestmentProgramVersion
     {
+        app(RecentAdminAuthentication::class)->assert($actor);
         return $this->persistVersion($program, $rate, $months, $validFrom, $actor, 'investment_program.version_created');
     }
 
     public function updateConditions(InvestmentProgram $program, string $rate, int $months, Carbon $validFrom, ?User $actor): InvestmentProgramVersion
     {
+        app(RecentAdminAuthentication::class)->assert($actor);
         $current = $this->activeVersion($program, Carbon::today());
         if ($current !== null && $this->decimal->compare((string) $current->monthly_rate, $rate) === 0 && $current->lock_months === $months) {
             return $current;

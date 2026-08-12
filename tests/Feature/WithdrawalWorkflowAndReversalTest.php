@@ -60,6 +60,27 @@ class WithdrawalWorkflowAndReversalTest extends TestCase
         app(WithdrawalWorkflowService::class)->cancel($request, $admin);
     }
 
+    public function test_only_active_admin_actor_can_perform_sensitive_transitions(): void
+    {
+        [$request, $admin] = $this->context();
+        $investorUser = User::factory()->create(['role' => 'investor', 'is_active' => true]);
+
+        $admin->update(['is_active' => false]);
+
+        foreach ([$investorUser, $admin] as $actor) {
+            try {
+                app(WithdrawalWorkflowService::class)->moveToReview($request, $actor);
+                $this->fail('A non-admin or inactive admin must not transition a withdrawal.');
+            } catch (DomainException) {
+                $this->assertSame('new', $request->fresh()->status);
+            }
+        }
+
+        $admin->update(['is_active' => true]);
+        app(WithdrawalWorkflowService::class)->moveToReview($request, $admin);
+        $this->assertSame('review', $request->fresh()->status);
+    }
+
     public function test_approved_can_be_cancelled_but_not_rejected_and_snapshots_stay_frozen(): void
     {
         [$request,$admin]= $this->context();$workflow=app(WithdrawalWorkflowService::class);$request->update(['wallet_address_snapshot'=>'TFrozenWallet','network_snapshot'=>'TRC20','fee_amount'=>'1','net_amount'=>'9']);$workflow->moveToReview($request,$admin);$workflow->approve($request->fresh(),$admin);$before=$request->fresh()->only(['requested_amount','reserved_amount','fee_amount','net_amount','wallet_address_snapshot','network_snapshot']);

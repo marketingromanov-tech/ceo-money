@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AdminMfaController;
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Accruals\Index as AccrualsIndex;
 use App\Livewire\Admin\Fees\Index as FeesIndex;
@@ -31,7 +32,9 @@ Route::get('/', [AuthController::class, 'create']);
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
-    Route::post('/login', [AuthController::class, 'store'])->name('login.store');
+    Route::post('/login', [AuthController::class, 'store'])->middleware('throttle:login')->name('login.store');
+    Route::get('/mfa/challenge', [AdminMfaController::class, 'challenge'])->name('mfa.challenge');
+    Route::post('/mfa/challenge', [AdminMfaController::class, 'verifyChallenge'])->name('mfa.verify');
 });
 
 Route::middleware('auth')->group(function () {
@@ -50,6 +53,15 @@ Route::middleware('auth')->group(function () {
     });
 
     Route::prefix('admin')->name('admin.')->middleware('role:admin')->group(function () {
+        Route::get('/security', [AdminMfaController::class, 'setup'])->name('security.setup');
+        Route::post('/security/enable', [AdminMfaController::class, 'enable'])->name('security.enable');
+    });
+
+    Route::prefix('admin')->name('admin.')->middleware(['role:admin', 'admin.mfa'])->group(function () {
+        Route::get('/recent-auth', [AdminMfaController::class, 'recent'])->name('recent-auth');
+        Route::post('/recent-auth', [AdminMfaController::class, 'verifyRecent'])->name('recent-auth.verify');
+        Route::post('/security/recovery-codes', [AdminMfaController::class, 'regenerateRecovery'])->name('security.recovery');
+        Route::delete('/security', [AdminMfaController::class, 'disable'])->name('security.disable');
         Route::get('/', Dashboard::class)->name('dashboard');
         Route::get('/investors', InvestorsIndex::class)->name('investors.index');
         Route::get('/investors/create', InvestorsCreate::class)->name('investors.create');

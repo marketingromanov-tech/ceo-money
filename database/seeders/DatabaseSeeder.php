@@ -91,6 +91,7 @@ class DatabaseSeeder extends Seeder
             'status' => 'approved', 'requested_at' => $today->copy()->subDays(24),
             'approved_at' => $today->copy()->subDays(22), 'approved_by' => $admin->id,
         ]);
+        $this->completeWithdrawalVerification($alexeyWithdrawal, $admin);
         $alexeyPayment = app(DividendWithdrawalService::class)->pay($alexeyWithdrawal, $admin, 'demo-dividend-alexey-001');
         $alexeyPaidAt = $today->copy()->subDays(20)->setTime(14, 30);
         $alexeyPayment->update(['paid_at' => $alexeyPaidAt]);
@@ -267,6 +268,7 @@ class DatabaseSeeder extends Seeder
             $request = app(WithdrawalRequestService::class)->createDividendRequest($alexeyAccount, '100.00000000', 'TAlexeyDemoWallet001', 'TRC20', actor: $admin);
             $workflow->moveToReview($request, $admin);
             $workflow->approve($request, $admin);
+            $this->completeWithdrawalVerification($request, $admin);
             app(DividendWithdrawalService::class)->pay($request, $admin, 'demo-personal-dividend-fee');
         }
 
@@ -274,6 +276,7 @@ class DatabaseSeeder extends Seeder
             $request = app(WithdrawalRequestService::class)->createDividendRequest($globalAccount, '100.00000000', 'TDemoInvestorWallet001', 'TRC20', actor: $admin);
             $workflow->moveToReview($request, $admin);
             $workflow->approve($request, $admin);
+            $this->completeWithdrawalVerification($request, $admin);
             app(DividendWithdrawalService::class)->pay($request, $admin, 'demo-global-dividend-fee');
         }
 
@@ -281,6 +284,7 @@ class DatabaseSeeder extends Seeder
             $request = app(WithdrawalRequestService::class)->createCapitalRequest($alexeyAccount, '1000.00000000', 'TAlexeyDemoWallet001', 'TRC20', actor: $admin);
             $workflow->moveToReview($request, $admin);
             $workflow->approve($request, $admin);
+            $this->completeWithdrawalVerification($request, $admin);
             app(CapitalWithdrawalService::class)->pay($request, $admin, 'demo-capital-fee');
         }
 
@@ -376,5 +380,15 @@ class DatabaseSeeder extends Seeder
     private function accrue(InvestmentLot $lot, Carbon $from, Carbon $to): void
     {
         app(DailyAccrualService::class)->recalculateForLot($lot, $from, $to);
+    }
+
+    private function completeWithdrawalVerification(WithdrawalRequest $request, User $admin): void
+    {
+        $request->refresh();
+        $verification = app(WithdrawalVerificationService::class);
+        $verification->initializeForRequest($request);
+        foreach (WithdrawalVerificationService::MANUAL_KEYS as $key) {
+            $verification->markPassed($request, $key, $admin);
+        }
     }
 }

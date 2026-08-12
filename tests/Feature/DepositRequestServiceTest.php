@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\DepositRequestService;
 use App\Services\DepositVerificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\QueryException;
 use Tests\TestCase;
 
 class DepositRequestServiceTest extends TestCase
@@ -33,6 +34,9 @@ class DepositRequestServiceTest extends TestCase
         $this->assertDatabaseCount('investment_transactions', 1);
         $this->assertSame('confirmed', $request->fresh()->status);
         $this->assertSame('deposit', InvestmentTransaction::first()->type);
+        $this->assertSame($request->id, InvestmentLot::first()->deposit_request_id);
+        $this->assertSame($request->id, InvestmentTransaction::first()->deposit_request_id);
+        $this->assertSame(InvestmentLot::first()->id, $request->fresh()->investmentLot->id);
         $this->assertSame(1, AuditLog::where('action', 'deposit_request.confirmed')->count());
         $log = AuditLog::where('action', 'deposit_request.confirmed')->sole();
         $this->assertSame(InvestmentLot::first()->id, $log->new_values['investment_lot_id']);
@@ -81,6 +85,27 @@ class DepositRequestServiceTest extends TestCase
         $this->assertSame('2.5000', $lot->monthly_rate);
         $this->assertSame(6, $lot->lock_months);
         $this->assertSame($lot->accrual_start_date->copy()->addMonthsNoOverflow(6)->toDateString(), $lot->unlock_date->toDateString());
+    }
+
+    public function test_database_rejects_duplicate_deposit_source_effects(): void
+    {
+        [$request] = $this->context();
+        $this->completeVerification($request);
+        app(DepositRequestService::class)->confirm($request);
+
+        try {
+            InvestmentLot::firstOrFail()->replicate()->save();
+            $this->fail('A deposit request must not source two investment lots.');
+        } catch (QueryException) {
+            $this->assertDatabaseCount('investment_lots', 1);
+        }
+
+        try {
+            InvestmentTransaction::firstOrFail()->replicate()->save();
+            $this->fail('A deposit request must not source two investment transactions.');
+        } catch (QueryException) {
+            $this->assertDatabaseCount('investment_transactions', 1);
+        }
     }
 
     private function context(array $requestAttributes = []): array

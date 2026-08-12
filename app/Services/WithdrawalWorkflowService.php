@@ -20,6 +20,7 @@ class WithdrawalWorkflowService
 
     public function approve(WithdrawalRequest $request, ?User $user = null): WithdrawalRequest
     {
+        app(RecentAdminAuthentication::class)->assert($user);
         return $this->transition($request, $user, 'approved', ['review'], 'withdrawal.approved', [
             'approved_at' => now(), 'approved_by' => $user?->id,
         ]);
@@ -50,6 +51,8 @@ class WithdrawalWorkflowService
         string $action,
         array $attributes,
     ): WithdrawalRequest {
+        $this->assertActiveAdmin($user);
+
         return DB::transaction(function () use ($request, $user, $target, $allowedFrom, $action, $attributes) {
             $request = WithdrawalRequest::query()->lockForUpdate()->findOrFail($request->id);
 
@@ -67,5 +70,16 @@ class WithdrawalWorkflowService
 
             return $request;
         });
+    }
+
+    private function assertActiveAdmin(?User $user): void
+    {
+        if ($user !== null && ! User::query()
+            ->whereKey($user->id)
+            ->where('role', 'admin')
+            ->where('is_active', true)
+            ->exists()) {
+            throw new DomainException('Only an active administrator can manage withdrawals.');
+        }
     }
 }

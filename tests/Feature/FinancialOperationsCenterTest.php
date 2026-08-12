@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Inbox\Index;
-use App\Models\{DailyAccrual,DepositRequest,InvestmentAccount,InvestmentLot,InvestmentTerm,Investor,InvestorWallet,User,WithdrawalRequest};
+use App\Models\{DailyAccrual,DepositRequest,InvestmentAccount,InvestmentLot,InvestmentTerm,Investor,InvestorWallet,InvestorWithdrawalDetail,User,WithdrawalRequest};
 use App\Services\{DepositVerificationService,FinancialOperationReadinessService,WithdrawalVerificationService};
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -37,6 +37,38 @@ class FinancialOperationsCenterTest extends TestCase
 
         Livewire::actingAs($admin)->test(Index::class)->assertSee('Требуют действия')->assertSee('Новый кошелёк')->set('tab','review')->assertSee('Вывод дивидендов')->assertSee('Ожидает');
         Livewire::actingAs($admin)->test(Dashboard::class)->assertViewHas('financialOperations',fn($values)=>$values['waiting']===2)->assertViewHas('riskIndicators',fn($items)=>$items->contains(fn($item)=>$item['label']==='Новый кошелёк')&&$items->contains(fn($item)=>$item['label']==='Зависшая заявка'))->assertSee('Финансовые операции')->assertSee('Риск-индикаторы');
+    }
+
+    public function test_readiness_accepts_permanent_details_and_preserves_legacy_wallet_compatibility(): void
+    {
+        [$admin, $investor, $account] = $this->context();
+        $detail = InvestorWithdrawalDetail::create([
+            'investor_id' => $investor->id, 'currency' => 'USDT', 'network' => 'TRC20',
+            'address' => 'TPermanentReadyAddress', 'is_active' => true,
+        ]);
+        $request = WithdrawalRequest::create([
+            'investor_id' => $investor->id, 'investment_account_id' => $account->id,
+            'type' => 'dividend', 'requested_amount' => '50', 'reserved_amount' => '50',
+            'fee_amount' => '1', 'fee_payer' => 'investor', 'fee_economic_type_snapshot' => 'platform_fee',
+            'net_amount' => '49', 'currency' => 'USDT', 'wallet_address_snapshot' => $detail->address,
+            'network_snapshot' => $detail->network, 'status' => 'approved', 'requested_at' => now(),
+        ]);
+        $verification = app(WithdrawalVerificationService::class);
+        $verification->initializeForRequest($request);
+        foreach (WithdrawalVerificationService::MANUAL_KEYS as $key) $verification->markPassed($request, $key, $admin);
+
+        $readiness = app(FinancialOperationReadinessService::class);
+        $this->assertTrue($readiness->withdrawal($request->fresh('verificationChecks'))['ready']);
+
+        $detail->update(['is_active' => false]);
+        $this->assertFalse($readiness->withdrawal($request->fresh('verificationChecks'))['ready']);
+
+        $legacy = InvestorWallet::create([
+            'investor_id' => $investor->id, 'currency' => 'USDT', 'network' => 'TRC20',
+            'address' => 'TLegacyReadyAddress', 'status' => 'approved',
+        ]);
+        $request->update(['investor_wallet_id' => $legacy->id]);
+        $this->assertTrue($readiness->withdrawal($request->fresh(['verificationChecks', 'investorWallet']))['ready']);
     }
 
     private function context():array

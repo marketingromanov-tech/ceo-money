@@ -9,11 +9,12 @@ use DomainException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
+use App\Livewire\Concerns\RequiresRecentAdminAuthentication;
 
 #[Layout('layouts.admin')]
 class Index extends Component
 {
-    use WithPagination;
+    use WithPagination, RequiresRecentAdminAuthentication;
 
     public string $status = '';
     public string $actionStep = 'details';
@@ -106,6 +107,7 @@ class Index extends Component
 
     public function confirmDeposit(DepositRequestService $service): void
     {
+        if (! $this->requireRecentAdminAuthentication()) return;
         try {
             $request = $this->selected();
             if (! $service->confirmationPreflight($request)['can_confirm']) {

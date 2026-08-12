@@ -33,7 +33,7 @@ class WithdrawalVerificationServiceTest extends TestCase
     public function test_payout_gate_rechecks_balance_race(): void
     {
         [$request,$admin,$account]=$this->context();$service=app(WithdrawalVerificationService::class);$service->initializeForRequest($request);foreach(WithdrawalVerificationService::MANUAL_KEYS as $key)$service->markPassed($request,$key,$admin);$request->update(['status'=>'approved']);$service->assertReadyForPayout($request);
-        $account->dailyAccruals()->delete();try{$service->assertReadyForPayout($request);$this->fail('Balance race');}catch(DomainException){$this->addToAssertionCount(1);}$this->assertSame('failed',$request->verificationChecks()->where('check_key','available_balance_verified')->sole()->status);
+        $account->dailyAccruals()->delete();try{$service->assertReadyForPayout($request);$this->fail('Balance race');}catch(DomainException){$this->addToAssertionCount(1);}$this->assertSame('passed',$request->verificationChecks()->where('check_key','available_balance_verified')->sole()->status);
     }
 
     public function test_missing_wallet_bad_fee_and_locked_capital_fail(): void

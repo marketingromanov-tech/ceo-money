@@ -12,9 +12,11 @@ use App\Models\User;
 use App\Models\WithdrawalRequest;
 use App\Services\AvailableBalanceService;
 use App\Services\CapitalWithdrawalService;
+use App\Services\WithdrawalVerificationService;
 use Carbon\Carbon;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Database\QueryException;
 use Tests\TestCase;
 
 class CapitalWithdrawalPaymentTest extends TestCase
@@ -28,6 +30,7 @@ class CapitalWithdrawalPaymentTest extends TestCase
         $second = $this->lot($account, '2026-02-01', '100.00000000');
         $request = $this->request($account, $investor, '100.00000000', '7.00000000');
         $service = app(CapitalWithdrawalService::class);
+        $this->completeVerification($request);
 
         $service->pay($request, txid: 'capital-tx');
         $service->pay($request, txid: 'ignored-second-call');
@@ -40,6 +43,8 @@ class CapitalWithdrawalPaymentTest extends TestCase
         $this->assertDatabaseCount('capital_withdrawal_allocations', 2);
         $this->assertDatabaseCount('investment_transactions', 1);
         $this->assertSame('100.00000000', InvestmentTransaction::first()->amount);
+        $this->assertSame($request->id, InvestmentTransaction::first()->withdrawal_request_id);
+        $this->assertSame(InvestmentTransaction::first()->id, $request->fresh()->investmentTransaction->id);
         $this->assertSame('paid', $request->fresh()->status);
         $this->assertSame('capital-tx', $request->fresh()->txid);
         $this->assertDatabaseHas('audit_logs', ['action' => 'withdrawal.capital_paid', 'entity_id' => $request->id]);
@@ -53,7 +58,9 @@ class CapitalWithdrawalPaymentTest extends TestCase
         $first = $this->lot($account, '2026-01-01', '100.00000000');
         $second = $this->lot($account, '2026-02-01', '100.00000000');
 
-        app(CapitalWithdrawalService::class)->pay($this->request($account, $investor, '40.00000000'));
+        $request = $this->request($account, $investor, '40.00000000');
+        $this->completeVerification($request);
+        app(CapitalWithdrawalService::class)->pay($request);
 
         $this->assertSame('60.00000000', $first->fresh()->remaining_amount);
         $this->assertSame('100.00000000', $second->fresh()->remaining_amount);
@@ -108,6 +115,46 @@ class CapitalWithdrawalPaymentTest extends TestCase
         }
     }
 
+    public function test_payment_rejects_non_admin_and_inactive_admin_actors(): void
+    {
+        [$account, $investor] = $this->context();
+        $this->lot($account, '2026-01-01', '100.00000000');
+        $request = $this->request($account, $investor, '40.00000000');
+        $this->completeVerification($request);
+
+        foreach ([
+            User::factory()->create(['role' => 'investor', 'is_active' => true]),
+            User::factory()->create(['role' => 'admin', 'is_active' => false]),
+        ] as $actor) {
+            try {
+                app(CapitalWithdrawalService::class)->pay($request, $actor);
+                $this->fail('Invalid actor must not pay a capital withdrawal.');
+            } catch (DomainException) {
+                $this->assertSame('approved', $request->fresh()->status);
+            }
+        }
+
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        app(CapitalWithdrawalService::class)->pay($request, $admin);
+        $this->assertSame('paid', $request->fresh()->status);
+    }
+
+    public function test_database_rejects_duplicate_capital_withdrawal_source_transaction(): void
+    {
+        [$account, $investor] = $this->context();
+        $this->lot($account, '2026-01-01', '100.00000000');
+        $request = $this->request($account, $investor, '40.00000000');
+        $this->completeVerification($request);
+        app(CapitalWithdrawalService::class)->pay($request);
+
+        try {
+            InvestmentTransaction::firstOrFail()->replicate()->save();
+            $this->fail('A withdrawal request must not source two investment transactions.');
+        } catch (QueryException) {
+            $this->assertDatabaseCount('investment_transactions', 1);
+        }
+    }
+
     private function context(): array
     {
         $investor = Investor::create(['user_id' => User::factory()->create()->id, 'status' => 'active']);
@@ -128,11 +175,23 @@ class CapitalWithdrawalPaymentTest extends TestCase
 
     private function request(InvestmentAccount $account, Investor $investor, string $amount, string $fee = '0'): WithdrawalRequest
     {
+        $net = app(\App\Services\AccrualCalculator::class)->subtract($amount, $fee);
         return WithdrawalRequest::create([
             'investor_id' => $investor->id, 'investment_account_id' => $account->id,
             'type' => 'capital', 'requested_amount' => $amount, 'reserved_amount' => $amount,
-            'fee_amount' => $fee, 'net_amount' => '1.00000000', 'currency' => 'USDT',
+            'fee_amount' => $fee, 'net_amount' => $net, 'currency' => 'USDT',
+            'wallet_address_snapshot' => 'wallet-1', 'network_snapshot' => 'TRC20',
             'status' => 'approved', 'requested_at' => now(), 'approved_at' => now(),
         ]);
+    }
+
+    private function completeVerification(WithdrawalRequest $request): void
+    {
+        $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        $verification = app(WithdrawalVerificationService::class);
+        $verification->initializeForRequest($request);
+        foreach (WithdrawalVerificationService::MANUAL_KEYS as $key) {
+            $verification->markPassed($request, $key, $admin);
+        }
     }
 }

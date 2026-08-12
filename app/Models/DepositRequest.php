@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DepositRequest extends Model
 {
@@ -47,4 +48,6 @@ class DepositRequest extends Model
     public function canceller(): BelongsTo { return $this->belongsTo(User::class, 'cancelled_by'); }
     public function depositAddress(): BelongsTo { return $this->belongsTo(DepositAddress::class); }
     public function verificationChecks(): HasMany { return $this->hasMany(DepositVerificationCheck::class); }
+    public function investmentLot(): HasOne { return $this->hasOne(InvestmentLot::class); }
+    public function investmentTransaction(): HasOne { return $this->hasOne(InvestmentTransaction::class); }
 }

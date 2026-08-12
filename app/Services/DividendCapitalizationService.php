@@ -27,6 +27,7 @@ class DividendCapitalizationService
         string $amount,
         ?User $actor = null,
     ): DividendCapitalization {
+        app(AuthenticatedMutationLimiter::class)->hit('capitalization', $actor);
         return DB::transaction(function () use ($account, $amount, $actor) {
             $account = InvestmentAccount::query()
                 ->with('investor.user')

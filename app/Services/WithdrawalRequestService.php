@@ -29,6 +29,7 @@ class WithdrawalRequestService
         ?InvestorWallet $investorWallet = null,
         ?User $actor = null,
     ): WithdrawalRequest {
+        app(AuthenticatedMutationLimiter::class)->hit('withdrawal', $actor);
         return DB::transaction(function () use ($account, $amount, $walletAddress, $network, $investorWallet, $actor) {
             $account = InvestmentAccount::query()->lockForUpdate()->findOrFail($account->id);
             $date = Carbon::today();
@@ -55,24 +56,29 @@ class WithdrawalRequestService
         ?InvestorWallet $investorWallet = null,
         ?User $actor = null,
     ): WithdrawalRequest {
+        app(AuthenticatedMutationLimiter::class)->hit('withdrawal', $actor);
         $date ??= Carbon::today();
-        $available = $this->balances->availableCapitalForWithdrawal($account, $date);
-        $this->assertPositiveAndAvailable($amount, $available);
-        $term = $this->accountTerm($account, $date);
 
-        if ($term !== null) {
-            if (! $term->partial_withdrawal_allowed && $this->decimal->compare($amount, $available) !== 0) {
-                throw new DomainException('Partial capital withdrawal is not allowed.');
+        return DB::transaction(function () use ($account, $amount, $walletAddress, $network, $date, $investorWallet, $actor) {
+            $account = InvestmentAccount::query()->lockForUpdate()->findOrFail($account->id);
+            $available = $this->balances->availableCapitalForWithdrawal($account, $date);
+            $this->assertPositiveAndAvailable($amount, $available);
+            $term = $this->accountTerm($account, $date);
+
+            if ($term !== null) {
+                if (! $term->partial_withdrawal_allowed && $this->decimal->compare($amount, $available) !== 0) {
+                    throw new DomainException('Partial capital withdrawal is not allowed.');
+                }
+
+                $remaining = $this->decimal->subtract($available, $amount);
+
+                if ($this->decimal->compare($remaining, $term->minimum_balance) < 0) {
+                    throw new DomainException('Minimum balance requirement would be violated.');
+                }
             }
 
-            $remaining = $this->decimal->subtract($available, $amount);
-
-            if ($this->decimal->compare($remaining, $term->minimum_balance) < 0) {
-                throw new DomainException('Minimum balance requirement would be violated.');
-            }
-        }
-
-        return $this->create($account, 'capital', 'capital_withdrawal', $amount, $walletAddress, $network, $date, $investorWallet, $actor);
+            return $this->create($account, 'capital', 'capital_withdrawal', $amount, $walletAddress, $network, $date, $investorWallet, $actor);
+        });
     }
 
     private function create(

@@ -93,6 +93,24 @@ class DepositVerificationService
         return $request->verificationChecks()->where('status', 'passed')->count() === count(self::KEYS);
     }
 
+    public function assertReadyForConfirmation(DepositRequest $request): void
+    {
+        DB::transaction(function () use ($request) {
+            $request = DepositRequest::query()->lockForUpdate()->findOrFail($request->id);
+            if ($request->status !== 'submitted') {
+                throw new DomainException('Эта заявка на пополнение не может быть подтверждена.');
+            }
+
+            $this->ensureInitialized($request);
+            $request->verificationChecks()->lockForUpdate()->get();
+            $this->refreshSystemChecks($request);
+
+            if (! $this->allRequiredPassed($request)) {
+                throw new DomainException('Не завершена обязательная проверка поступления.');
+            }
+        });
+    }
+
     public function summary(DepositRequest $request): array
     {
         $this->ensureInitialized($request);
