@@ -70,3 +70,7 @@ The command is read-only, prints no secrets and exits non-zero for production bl
 ## Queue and scheduler
 
 No application schedule is currently registered in `routes/console.php`; therefore no accrual cron requirement was found. Critical financial flows and current database notifications execute synchronously. The database queue tables exist, but a worker is not required until queued jobs are introduced. Reassess both conclusions whenever scheduled commands or `ShouldQueue` jobs are added.
+
+## Database backups
+
+CEO Money includes private CLI-only database backup, verification, retention cleanup, and isolated restore-test commands. Production must provide compatible `mysqldump` and `mysql` clients and a dedicated restore-test database. Configure monitoring and an external scheduler; do not expose these operations through HTTP. The complete operating and disaster-recovery procedure is in [README-BACKUP-RESTORE.md](README-BACKUP-RESTORE.md).
