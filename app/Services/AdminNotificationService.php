@@ -11,6 +11,19 @@ use Illuminate\Support\Facades\Notification;
 
 class AdminNotificationService
 {
+    public function backupFailed(string $command): void
+    {
+        $payload = [
+            'event' => 'backup.failed',
+            'title' => 'Ошибка автоматического резервного копирования',
+            'command' => $command,
+            'target' => route('admin.settings.index'),
+        ];
+
+        $admins = User::query()->where('role', 'admin')->where('is_active', true)->get();
+        if ($admins->isNotEmpty()) Notification::send($admins, new AdminActionNotification($payload));
+    }
+
     public function depositCreated(DepositRequest $request): void
     {
         $this->send('deposit.created', 'Новая заявка на пополнение', $request->investor_id, [

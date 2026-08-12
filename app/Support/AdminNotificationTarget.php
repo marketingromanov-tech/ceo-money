@@ -11,6 +11,7 @@ final class AdminNotificationTarget
             'deposit.created', 'deposit.payment_submitted' => $id ? route('admin.deposits.index', ['deposit' => $id]) : route('admin.deposits.index'),
             'withdrawal.created' => $id ? route('admin.withdrawals.index', ['withdrawal' => $id]) : route('admin.withdrawals.index'),
             'wallet.created' => route('admin.wallets.index'),
+            'backup.failed' => route('admin.settings.index'),
             default => route('admin.notifications.index'),
         };
     }

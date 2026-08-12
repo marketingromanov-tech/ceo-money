@@ -7,6 +7,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Storage;
 
 class ProductionCheck extends Command
@@ -109,7 +110,13 @@ class ProductionCheck extends Command
             $check('Active admin MFA', false, 'unable to inspect');
         }
 
-        $this->line('[INFO] Scheduler: no scheduled application commands are currently registered.');
+        $scheduledCommands = collect(app(Schedule::class)->events())->pluck('command')->filter();
+        $backupScheduled = $scheduledCommands->contains(fn (string $command) => str_contains($command, 'backup:database') && str_contains($command, '--verify'));
+        $cleanupScheduled = $scheduledCommands->contains(fn (string $command) => str_contains($command, 'backup:cleanup'));
+        $restoreScheduled = $scheduledCommands->contains(fn (string $command) => str_contains($command, 'backup:restore'));
+        $check('Verified backup schedule', $backupScheduled, 'backup:database --verify must be registered');
+        $check('Backup cleanup schedule', $cleanupScheduled, 'backup:cleanup must be registered');
+        $check('Automatic restore schedule', ! $restoreScheduled, 'restore and restore-test must never be scheduled');
         $this->line('[INFO] Queue: current critical financial and database notification flows are synchronous.');
         return in_array(false, $checks, true) ? self::FAILURE : self::SUCCESS;
     }

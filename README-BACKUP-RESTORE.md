@@ -41,13 +41,15 @@ php artisan backup:cleanup
 
 `backup:database` streams `mysqldump` directly into gzip, then atomically renames the temporary file. The database password is supplied to the child process through `MYSQL_PWD`; it is not included in command arguments, output, metadata, or audit payloads. A SHA-256 digest and byte size are stored in `backup_records`.
 
-Schedule the verified backup command with the platform scheduler or cron, not an HTTP endpoint. A typical daily invocation is:
+Run Laravel's scheduler every minute from the active release symlink:
 
 ```cron
-15 2 * * * cd /srv/ceo-money && php artisan backup:database --verify --quiet
+* * * * * cd /srv/ceo-money/current && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-Monitor its exit code and alert on failure. Run `backup:cleanup` separately after successful off-host replication. Retention deletion is limited to files referenced by records inside the configured private backup root.
+The application schedule uses `config('app.timezone')`, currently UTC. It runs `backup:database --verify` daily at 03:00 UTC and `backup:cleanup` at 03:30 UTC. Both commands use overlap protection and a shared cache lock for single-server execution across an application cluster. The production cache store must therefore support atomic locks and be shared by all scheduler nodes; the documented database cache satisfies this requirement.
+
+Failures are written by the command and sent through the existing admin database-notification center. Retention deletion is limited to files referenced by records inside the configured private backup root. Restore, restore-test and real restore operations are never scheduled automatically.
 
 ## Isolated restore drill
 

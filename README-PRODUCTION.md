@@ -70,11 +70,21 @@ The command is read-only, prints no secrets and exits non-zero for production bl
 
 ## Queue and scheduler
 
-No application schedule is currently registered in `routes/console.php`; therefore no accrual cron requirement was found. Critical financial flows and current database notifications execute synchronously. The database queue tables exist, but a worker is not required until queued jobs are introduced. Reassess both conclusions whenever scheduled commands or `ShouldQueue` jobs are added.
+Critical financial flows and current database notifications execute synchronously. The database queue tables exist, but a worker is not required until queued jobs are introduced.
+
+Laravel's scheduler must be invoked every minute by the production host:
+
+```cron
+* * * * * cd /srv/ceo-money/current && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Scheduled times use Laravel's application timezone from `config('app.timezone')`, currently UTC. A verified database backup runs daily at 03:00 UTC and retention cleanup runs at 03:30 UTC. Both jobs prevent overlapping and use the shared database cache lock so only one application server executes them. Do not configure a per-host file or array cache in a multi-server deployment.
+
+No restore, restore-test, migration, accrual, or financial operation is scheduled. Automatic restore is prohibited.
 
 ## Database backups
 
-CEO Money includes private CLI-only database backup, verification, retention cleanup, and isolated restore-test commands. Production must provide compatible `mysqldump` and `mysql` clients and a dedicated restore-test database. Configure monitoring and an external scheduler; do not expose these operations through HTTP. The complete operating and disaster-recovery procedure is in [README-BACKUP-RESTORE.md](README-BACKUP-RESTORE.md).
+CEO Money includes private CLI-only database backup, verification, retention cleanup, and isolated restore-test commands. Production must provide compatible `mysqldump` and `mysql` clients and a dedicated restore-test database. Backup command failures reuse the existing admin database-notification center. Do not expose these operations through HTTP. The complete operating and disaster-recovery procedure is in [README-BACKUP-RESTORE.md](README-BACKUP-RESTORE.md).
 
 ## Frontend release artifact
 
