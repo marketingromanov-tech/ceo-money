@@ -1,0 +1,28 @@
+@php use App\Support\MoneyFormatter; @endphp
+<div class="mx-auto max-w-[1500px] space-y-5">
+    <div><h2 class="text-2xl font-semibold">Начисления</h2><p class="mt-1 text-sm text-[#9587a7]">Детальная динамика вашего инвестиционного дохода</p></div>
+
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        @foreach(['today'=>'Сегодня','month'=>'Этот месяц','total'=>'Всё время','period'=>'Выбранный период'] as $key=>$label)
+            <div class="rounded-[18px] border border-white/[.07] bg-[#3c354a] p-4"><p class="text-xs text-[#9789a9]">{{ $label }}</p><p class="mt-2 text-xl font-semibold">{{ MoneyFormatter::format($summary[$key]) }} <span class="text-xs text-[#88799e]">USDT</span></p></div>
+        @endforeach
+    </div>
+
+    <section class="rounded-[20px] border border-white/[.07] bg-[#3c354a] p-4 sm:p-6">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between"><div><h3 class="text-lg font-semibold">Динамика начислений</h3><p class="text-xs text-[#9587a7]">По выбранному диапазону, границы включены</p></div><div class="w-full xl:max-w-xl">@include('livewire.investor.partials.period')</div></div>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-2xl border border-white/[.05] bg-[#2d2639] px-4 py-3"><p class="text-[11px] text-[#9183a2]">Начислено за период</p><p class="mt-1 text-lg font-semibold text-cyan-100">{{ MoneyFormatter::format($chartSummary['total']) }} <span class="text-xs font-normal text-[#81748f]">USDT</span></p></div>
+            <div class="rounded-2xl border border-white/[.05] bg-[#2d2639] px-4 py-3"><p class="text-[11px] text-[#9183a2]">Среднее в день</p><p class="mt-1 text-lg font-semibold">{{ MoneyFormatter::format($chartSummary['average']) }} <span class="text-xs font-normal text-[#81748f]">USDT</span></p></div>
+            <div class="rounded-2xl border border-white/[.05] bg-[#2d2639] px-4 py-3"><p class="text-[11px] text-[#9183a2]">Дней с начислениями</p><p class="mt-1 text-lg font-semibold">{{ $chartSummary['days'] }}</p></div>
+        </div>
+        <div class="relative mt-1"><div class="pointer-events-none absolute left-1 top-7 z-10 flex h-44 flex-col justify-between text-[9px] text-[#756986]"><span>{{ MoneyFormatter::format($chartMaximum) }}</span><span>0.00</span></div><div class="pl-8">@include('livewire.investor.partials.chart')</div></div>
+    </section>
+
+    <section class="rounded-[20px] border border-white/[.07] bg-[#3c354a] p-4 sm:p-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex items-center gap-3"><button type="button" wire:click="previousMonth" class="flex size-9 cursor-pointer items-center justify-center rounded-xl bg-white/5">←</button><h3 class="min-w-32 text-center font-semibold">{{ $monthLabel }}</h3><button type="button" wire:click="nextMonth" class="flex size-9 cursor-pointer items-center justify-center rounded-xl bg-white/5">→</button></div><div class="flex gap-2 text-xs"><span class="rounded-xl bg-white/[.04] px-3 py-2 text-[#a99abc]">Записей: <b class="text-white">{{ $monthSummary['count'] }}</b></span><span class="rounded-xl bg-white/[.04] px-3 py-2 text-[#a99abc]">Итого: <b class="text-cyan-100">{{ MoneyFormatter::format($monthSummary['total']) }} USDT</b></span></div></div>
+
+        <div class="mt-4 hidden overflow-hidden rounded-2xl border border-white/[.06] md:block"><table class="w-full text-left text-sm"><thead class="bg-white/[.035] text-xs text-[#9d8faf]"><tr><th class="p-3">Дата</th><th class="p-3">Инвестиция</th><th class="p-3">Сумма инвестиции</th><th class="p-3">Ставка</th><th class="p-3">Начислено</th><th class="p-3">Корректировка</th><th class="p-3">Итого</th></tr></thead><tbody>@foreach($accruals as $item) @php $investmentNumber = $investmentNumbers[$item->investment_lot_id]; @endphp<tr class="border-t border-white/[.05]"><td class="p-3">{{ $item->accrual_date->format('d.m.Y') }}</td><td class="p-3"><span title="Инвестиция №{{ $investmentNumber }}" class="inline-flex rounded-lg border border-purple-300/15 bg-purple-300/[.08] px-2 py-1 text-xs font-semibold text-purple-100">№{{ $investmentNumber }}</span></td><td class="p-3">{{ MoneyFormatter::format($item->principal_amount) }} USDT</td><td class="p-3">{{ MoneyFormatter::format($item->monthly_rate) }}%</td><td class="p-3">{{ MoneyFormatter::format($item->calculated_amount) }}</td><td class="p-3">{{ MoneyFormatter::format($item->adjustment_amount) }}</td><td class="p-3 font-semibold text-cyan-200">{{ MoneyFormatter::format($item->final_amount) }}</td></tr>@endforeach</tbody></table></div>
+
+        <div class="mt-4 space-y-3 md:hidden">@forelse($accruals as $item) @php $investmentNumber = $investmentNumbers[$item->investment_lot_id]; @endphp<article class="rounded-2xl bg-white/[.035] p-4"><div class="flex items-center justify-between gap-3"><div><p class="font-medium">{{ $item->accrual_date->format('d.m.Y') }}</p><span class="mt-1 inline-flex rounded-lg border border-purple-300/15 bg-purple-300/[.08] px-2 py-1 text-[10px] font-semibold text-purple-100">Инвестиция №{{ $investmentNumber }}</span></div><p class="font-semibold text-cyan-200">{{ MoneyFormatter::format($item->final_amount) }} USDT</p></div><div class="mt-3 grid grid-cols-2 gap-2 text-xs text-[#a99abc]"><p>Сумма инвестиции {{ MoneyFormatter::format($item->principal_amount) }} USDT</p><p>Ставка {{ MoneyFormatter::format($item->monthly_rate) }}%</p><p>Начислено {{ MoneyFormatter::format($item->calculated_amount) }}</p><p>Корректировка {{ MoneyFormatter::format($item->adjustment_amount) }}</p></div></article>@empty<p class="text-sm text-[#9284a3]">В этом месяце начислений нет.</p>@endforelse</div>
+    </section>
+</div>

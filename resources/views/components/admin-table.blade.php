@@ -1,0 +1,2 @@
+@props(['title'])
+<section class="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/60"><div class="border-b border-white/10 px-5 py-4"><h3 class="font-medium text-white">{{ $title }}</h3></div><div class="overflow-x-auto"><table class="w-full min-w-[680px] text-left text-sm [&_td]:px-5 [&_td]:py-3.5 [&_td]:text-slate-400 [&_th]:px-5 [&_th]:py-3 [&_th]:text-xs [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-slate-500 [&_thead]:border-b [&_thead]:border-white/10 [&_tbody_tr]:border-b [&_tbody_tr]:border-white/5">{{ $slot }}</table></div></section>
