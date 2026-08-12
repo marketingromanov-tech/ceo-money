@@ -7,13 +7,25 @@ Database backups are operational artifacts, not public downloads. The applicatio
 ```dotenv
 BACKUP_DISK=backup
 BACKUP_RETENTION_DAYS=30
+BACKUP_MIN_FREE_BYTES=1073741824
 MYSQLDUMP_BINARY=mysqldump
 MYSQL_BINARY=mysql
+BACKUP_DB_HOST=<private-operational-mysql-host>
+BACKUP_DB_PORT=3306
+BACKUP_DB_USERNAME=<dedicated-backup-operator>
+BACKUP_DB_PASSWORD=<secret-manager>
 BACKUP_RESTORE_TEST_DATABASE=ceo_money_restore_test
 APP_COMMIT=<deployed-git-sha>
 ```
 
-The runtime user needs read/write access to the private backup directory. The database user used for backup needs the MySQL privileges required by `mysqldump --single-transaction --triggers --routines`; restore-test additionally needs permission to create and drop only the dedicated test database. Prefer separate least-privileged operational credentials in production.
+The runtime user needs read/write access to the private backup directory. `BACKUP_DB_*` is mandatory operational configuration: there is no fallback to `DB_USERNAME` or `DB_PASSWORD`.
+
+Use two database roles:
+
+- The CEO Money application user (`DB_*`) receives only the data and schema privileges needed by the application and Laravel migrations on `DB_DATABASE`. It must not receive global `CREATE DATABASE` or `DROP DATABASE` privileges.
+- The non-web backup operator (`BACKUP_DB_*`) receives read privileges required by `mysqldump --single-transaction --triggers --routines` on `DB_DATABASE`, plus narrowly scoped create/drop/import privileges for the dedicated restore-test database environment. It is used by CLI operations only.
+
+Provision these grants through the database platform/IAM controls. MySQL grant capabilities differ between managed providers, so verify that the operator cannot create, drop, read, or modify unrelated databases. Never place its password in a command argument, CLI output, logs, cron file, repository, or release artifact.
 
 Never expose the backup directory through the web server, object-storage public ACLs, Sail file sharing, or support downloads. Store off-host copies in encrypted private storage with restricted operator access and retention controls.
 
@@ -46,6 +58,8 @@ php artisan backup:restore-test <backup-record-id>
 ```
 
 It recreates only `BACKUP_RESTORE_TEST_DATABASE`, imports the archive, checks required schema and migrations, reports key table counts, checks duplicate financial source references, and confirms stored MFA ciphertext values remain non-empty strings. It drops the isolated database after the test; `--keep` is available only for a controlled investigation. In production the command also requires `--force`.
+
+The command fails closed when the target is empty/invalid, normalizes and compares it with `DB_DATABASE`, rejects missing or application-user operational credentials, and rejects wildcard/URL-like operational hosts. These checks happen before database creation or deletion.
 
 Use a database name and credentials dedicated to restore drills. Never point this setting at production, staging, a developer database, or a shared schema. A passing drill validates recoverability of the SQL artifact; it does not replace application smoke tests or reconciliation by finance staff.
 

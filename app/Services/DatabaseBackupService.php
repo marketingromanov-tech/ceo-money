@@ -78,10 +78,20 @@ class DatabaseBackupService
 
     private function dump(string $target):void
     {
-        $db=config('database.connections.mysql');$command=[config('backup.mysqldump_binary'),'--host='.$db['host'],'--port='.(string)$db['port'],'--user='.$db['username'],'--single-transaction','--quick','--skip-lock-tables','--default-character-set=utf8mb4','--triggers','--routines',(string)$db['database']];
-        $pipes=[];$process=proc_open($command,[1=>['pipe','w'],2=>['pipe','w']],$pipes,null,$this->processEnvironment((string)$db['password']));if(!is_resource($process))throw new DomainException('mysqldump could not be started.');
+        $db=config('database.connections.mysql');$operational=$this->operationalDatabase();$command=[config('backup.mysqldump_binary'),'--host='.$operational['host'],'--port='.(string)$operational['port'],'--user='.$operational['username'],'--single-transaction','--quick','--skip-lock-tables','--default-character-set=utf8mb4','--triggers','--routines',(string)$db['database']];
+        $pipes=[];$process=proc_open($command,[1=>['pipe','w'],2=>['pipe','w']],$pipes,null,$this->processEnvironment($operational['password']));if(!is_resource($process))throw new DomainException('mysqldump could not be started.');
         $gz=gzopen($target,'wb9');while(!feof($pipes[1]))gzwrite($gz,fread($pipes[1],1048576));gzclose($gz);$error=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);$code=proc_close($process);
         if($code!==0)throw new DomainException('Database dump failed: '.mb_substr(trim($error),0,500));
+    }
+    /** @return array{host:string,port:int,username:string,password:string} */
+    private function operationalDatabase():array
+    {
+        $settings=config('backup.database');
+        foreach(['host','username','password'] as $key)if(!is_string($settings[$key]??null)||trim($settings[$key])==='')throw new DomainException('Operational backup database credentials are not configured.');
+        $host=trim($settings['host']);$port=filter_var($settings['port']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>1,'max_range'=>65535]]);
+        if($port===false||in_array(strtolower($host),['*','0.0.0.0','::'],true)||preg_match('/[\s\/:\\\\]/',$host))throw new DomainException('Operational backup database host or port is invalid.');
+        if(hash_equals(trim((string)config('database.connections.mysql.username')),trim($settings['username'])))throw new DomainException('Operational backup credentials must be separate from application database credentials.');
+        return ['host'=>$host,'port'=>$port,'username'=>trim($settings['username']),'password'=>$settings['password']];
     }
     private function processEnvironment(string $password): array
     {
@@ -95,5 +105,5 @@ class DatabaseBackupService
         $root=realpath(Storage::disk(config('backup.disk'))->path(''))?:Storage::disk(config('backup.disk'))->path('');$path=Storage::disk($record->storage_disk)->path($record->storage_path);$parent=realpath(dirname($path));
         if(!$parent||!str_starts_with($parent.DIRECTORY_SEPARATOR,rtrim($root,DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR))throw new DomainException('Backup path is outside configured root.');return $path;
     }
-    private function commit():?string{$value=(string)env('APP_COMMIT','');return preg_match('/^[a-f0-9]{7,40}$/',$value)?$value:null;}
+    private function commit():?string{$value=(string)config('app.commit','');return preg_match('/^[a-f0-9]{7,40}$/',$value)?$value:null;}
 }

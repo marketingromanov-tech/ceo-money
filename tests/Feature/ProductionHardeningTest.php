@@ -7,6 +7,7 @@ use App\Services\AuthenticatedMutationLimiter;
 use App\Support\AdminNotificationTarget;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class ProductionHardeningTest extends TestCase
@@ -52,6 +53,26 @@ class ProductionHardeningTest extends TestCase
     public function test_production_check_is_read_only_and_reports_local_blockers(): void
     {
         $this->artisan('app:production-check')->assertFailed()->expectsOutputToContain('[BLOCK] APP_ENV');
+    }
+
+    public function test_production_check_rejects_wildcard_proxy_and_missing_frontend_manifest(): void
+    {
+        config(['security.trusted_proxies' => ['*'], 'production.frontend_manifest' => public_path('missing-production-manifest.json')]);
+        $this->artisan('app:production-check')->assertFailed()
+            ->expectsOutputToContain('[BLOCK] Trusted proxies wildcard')
+            ->expectsOutputToContain('[BLOCK] Frontend manifest');
+    }
+
+    public function test_production_check_validates_database_session_table_without_destructive_queries(): void
+    {
+        config(['session.driver' => 'database', 'session.table' => 'missing_sessions_table']);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void { $queries[] = strtolower($query->sql); });
+
+        $this->artisan('app:production-check')->assertFailed()->expectsOutputToContain('[BLOCK] Session table');
+
+        $sql = implode("\n", $queries);
+        $this->assertDoesNotMatchRegularExpression('/\b(drop|truncate|delete|update|insert|alter|create)\b/', $sql);
     }
 
     public function test_database_seeder_never_creates_demo_data_in_production(): void

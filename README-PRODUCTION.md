@@ -49,6 +49,7 @@ default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; 
 
 - Never expose MySQL port 3306 publicly. Bind it to an internal/private network.
 - Use a separate least-privileged application DB user and protected credentials. Prefer separate credentials for backups.
+- The application DB user may manage schema objects inside `DB_DATABASE` for migrations, but must not have global `CREATE DATABASE`/`DROP DATABASE`. Backup and restore-test CLI commands use mandatory, separate `BACKUP_DB_*` credentials; no fallback to application credentials is allowed.
 - Before release: maintenance mode, backup, deploy code, run `php artisan migrate --force`, clear/rebuild caches, run production check, then restore traffic.
 - Rollback must account for forward database compatibility; do not rotate `APP_KEY` as part of rollback.
 - `DatabaseSeeder` exits without creating demo credentials outside local/testing.
@@ -74,3 +75,12 @@ No application schedule is currently registered in `routes/console.php`; therefo
 ## Database backups
 
 CEO Money includes private CLI-only database backup, verification, retention cleanup, and isolated restore-test commands. Production must provide compatible `mysqldump` and `mysql` clients and a dedicated restore-test database. Configure monitoring and an external scheduler; do not expose these operations through HTTP. The complete operating and disaster-recovery procedure is in [README-BACKUP-RESTORE.md](README-BACKUP-RESTORE.md).
+
+## Frontend release artifact
+
+Every production release must contain `public/build/manifest.json` and the referenced versioned assets. Two supported build paths are:
+
+1. Preferred: run `npm ci && npm run build` in CI/CD and include `public/build` in an immutable release artifact.
+2. Build during release preparation on the server with a compatible Node version, before the release is activated.
+
+Do not build after traffic has switched to the new release. `app:production-check` blocks a release whose Vite manifest is missing.

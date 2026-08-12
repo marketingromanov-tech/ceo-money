@@ -16,21 +16,22 @@ class DatabaseRestoreTestService
     public function run(BackupRecord $backup, bool $keepDatabase = false): array
     {
         $this->backups->verify($backup);
-        $database = (string) config('backup.restore_test_database');
+        $database = $this->normalizeDatabaseName((string) config('backup.restore_test_database'));
         $source = (string) config('database.connections.mysql.database');
+        $operational = $this->operationalDatabase();
 
         if ($database === '' || ! preg_match('/^[A-Za-z0-9_]+$/', $database)) {
             throw new DomainException('BACKUP_RESTORE_TEST_DATABASE must contain a dedicated database name.');
         }
-        if (hash_equals($source, $database)) {
+        if (hash_equals($this->normalizeDatabaseName($source), $database)) {
             throw new DomainException('Restore-test database must not be the current application database.');
         }
 
         $this->recreateDatabase($database);
 
         try {
-            $this->import($this->backups->absolutePath($backup), $database);
-            $report = $this->inspect($database);
+            $this->import($this->backups->absolutePath($backup), $database, $operational);
+            $report = $this->inspect($database, $operational);
             app(AuditLogService::class)->log('backup.restore_test_completed', $backup, auth()->user(), null, [
                 'backup_record_id' => $backup->id,
                 'database_name' => $database,
@@ -60,9 +61,8 @@ class DatabaseRestoreTestService
         $this->runMysql(null, sprintf('DROP DATABASE IF EXISTS `%s`;', $database));
     }
 
-    private function import(string $archive, string $database): void
+    private function import(string $archive, string $database, array $db): void
     {
-        $db = config('database.connections.mysql');
         $command = [
             config('backup.mysql_binary'),
             '--host='.$db['host'],
@@ -100,9 +100,13 @@ class DatabaseRestoreTestService
     }
 
     /** @return array<string, mixed> */
-    private function inspect(string $database): array
+    private function inspect(string $database, array $operational): array
     {
         $connection = config('database.connections.mysql');
+        $connection['host'] = $operational['host'];
+        $connection['port'] = $operational['port'];
+        $connection['username'] = $operational['username'];
+        $connection['password'] = $operational['password'];
         $connection['database'] = $database;
         Config::set('database.connections.backup_restore_test', $connection);
         DB::purge('backup_restore_test');
@@ -145,7 +149,7 @@ class DatabaseRestoreTestService
 
     private function runMysql(?string $database, string $statement): void
     {
-        $db = config('database.connections.mysql');
+        $db = $this->operationalDatabase();
         $command = [config('backup.mysql_binary'), '--host='.$db['host'], '--port='.(string) $db['port'], '--user='.$db['username']];
         if ($database !== null) {
             $command[] = $database;
@@ -163,6 +167,31 @@ class DatabaseRestoreTestService
         if (proc_close($process) !== 0) {
             throw new DomainException('Restore test database preparation failed: '.mb_substr(trim($error), 0, 500));
         }
+    }
+
+    /** @return array{host:string,port:int,username:string,password:string} */
+    private function operationalDatabase(): array
+    {
+        $settings = config('backup.database');
+        foreach (['host', 'username', 'password'] as $key) {
+            if (! is_string($settings[$key] ?? null) || trim($settings[$key]) === '') {
+                throw new DomainException('Operational restore-test database credentials are not configured.');
+            }
+        }
+        $host = trim($settings['host']);
+        $port = filter_var($settings['port'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 65535]]);
+        if ($port === false || in_array(strtolower($host), ['*', '0.0.0.0', '::'], true) || preg_match('/[\s\/:\\\\]/', $host)) {
+            throw new DomainException('Operational restore-test database host or port is invalid.');
+        }
+        if (hash_equals(trim((string) config('database.connections.mysql.username')), trim($settings['username']))) {
+            throw new DomainException('Operational restore-test credentials must be separate from application database credentials.');
+        }
+        return ['host' => $host, 'port' => $port, 'username' => trim($settings['username']), 'password' => $settings['password']];
+    }
+
+    private function normalizeDatabaseName(string $database): string
+    {
+        return strtolower(trim($database, " \t\n\r\0\x0B`"));
     }
 
     private function environment(string $password): array

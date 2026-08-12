@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'commit' => env('APP_COMMIT'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
