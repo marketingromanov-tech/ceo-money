@@ -28,6 +28,22 @@ class ProductionHardeningTest extends TestCase
         $this->assertNull($this->withServerVariables(['HTTPS' => 'off', 'SERVER_PORT' => 80])->get('http://localhost/login')->headers->get('Strict-Transport-Security'));
     }
 
+    public function test_exact_configured_proxy_is_trusted_after_configuration_is_cached(): void
+    {
+        $this->app->detectEnvironment(fn () => 'production');
+        config()->set([
+            'security.headers_enabled' => true,
+            'security.trusted_proxies' => ['10.20.30.40'],
+        ]);
+
+        $response = $this
+            ->withServerVariables(['REMOTE_ADDR' => '10.20.30.40', 'HTTPS' => 'off', 'SERVER_PORT' => 80])
+            ->withHeaders(['X-Forwarded-Proto' => 'https', 'X-Forwarded-Port' => '443'])
+            ->get('http://staging.example/login');
+
+        $response->assertHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    }
+
     public function test_notification_targets_are_derived_from_allowlisted_event_types(): void
     {
         $this->assertSame(route('admin.deposits.index', ['deposit' => 42]), AdminNotificationTarget::resolve(['event' => 'deposit.created', 'entity_id' => 42, 'target' => 'javascript:alert(1)']));

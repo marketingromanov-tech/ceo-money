@@ -7,7 +7,8 @@ use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\EnsureAdminMfa;
 use App\Http\Middleware\SecurityHeaders;
-use Illuminate\Http\Request;
+use App\Http\Middleware\TrustConfiguredProxies;
+use Illuminate\Http\Middleware\TrustProxies;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,10 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $trustedProxies = array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', '')))));
-        if ($trustedProxies !== []) {
-            $middleware->trustProxies(at: $trustedProxies, headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_HOST | Request::HEADER_X_FORWARDED_PORT | Request::HEADER_X_FORWARDED_PROTO);
-        }
+        $middleware->replace(TrustProxies::class, TrustConfiguredProxies::class);
         $middleware->appendToGroup('web', EnsureUserIsActive::class);
         $middleware->appendToGroup('web', SecurityHeaders::class);
         $middleware->alias(['role' => EnsureUserHasRole::class, 'admin.mfa' => EnsureAdminMfa::class]);
