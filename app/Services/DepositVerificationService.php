@@ -46,12 +46,18 @@ class DepositVerificationService
         if (! in_array($request->status, ['pending', 'payment_submitted', 'submitted'], true)) return;
         $preflight = $this->deposits->confirmationPreflight($request);
         $term = $preflight['term'];
-        $this->setSystem($request, 'investment_terms_active', $term !== null, $term ? [
+        $effective = $preflight['effective_terms'] ?? null;
+        $this->setSystem($request, 'investment_terms_active', $effective !== null || $term !== null, $effective ? [
+            'source' => $effective['source'],
+            'rate' => $effective['rate'],
+            'term_months' => $effective['term_months'],
+            'lock_days' => $effective['lock_days'],
+        ] : ($term ? [
             'investment_term_id' => $term->id,
             'monthly_rate' => (string) $term->monthly_rate,
             'lock_months' => $term->lock_months,
             'accrual_start_date' => $preflight['date']->toDateString(),
-        ] : null);
+        ] : null));
 
         $duplicateFree = $request->txid !== null && ! DepositRequest::query()
             ->where('txid', $request->txid)->whereKeyNot($request->id)->exists();

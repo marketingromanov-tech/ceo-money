@@ -7,6 +7,7 @@ use App\Models\DepositAddress;
 use App\Models\InvestmentAccount;
 use App\Models\InvestmentLot;
 use App\Models\InvestmentProgram;
+use App\Models\InvestmentProgramVersion;
 use App\Models\InvestmentTerm;
 use App\Models\InvestmentTransaction;
 use App\Models\InvestorPaymentDetail;
@@ -67,7 +68,7 @@ class DepositRequestService
         $date = ($date ?? Carbon::today())->copy()->startOfDay();
         $term = $this->accountTerm($request, $date);
 
-        return ['date' => $date, 'term' => $term, 'can_confirm' => $term !== null];
+        return ['date' => $date, 'term' => $term, 'effective_terms' => $request->effective_terms_snapshot, 'can_confirm' => $request->effective_terms_snapshot !== null || $term !== null];
     }
 
     public function submit(DepositRequest $request, string $receivedAmount, ?string $txid, ?User $actor = null): DepositRequest
@@ -159,11 +160,13 @@ class DepositRequestService
         ?string $network = null,
         ?User $actor = null,
         ?InvestmentProgram $program = null,
+        ?array $effectiveTerms = null,
     ): DepositRequest {
         app(AuthenticatedMutationLimiter::class)->hit('deposit', $actor);
         $programVersion = null;
         if ($program !== null) {
-            app(InvestmentProgramService::class)->assertAmount($program, $amount, $account->currency);
+            $effectiveTerms = app(EffectiveInvestmentTermsResolver::class)->resolve($account->investor->user, $account->currency, $amount, Carbon::today());
+            if ($effectiveTerms['source'] === 'program' && $effectiveTerms['program_id'] !== $program->id) throw new DomainException('Сумма не соответствует диапазону выбранной инвестиционной программы.');
             $programVersion = app(InvestmentProgramService::class)->activeVersion($program, Carbon::today());
             if ($programVersion === null) {
                 throw new DomainException('У выбранной программы нет действующих условий.');
@@ -193,7 +196,7 @@ class DepositRequestService
 
         $paymentDetails = $this->paymentDetailsFor($account, $network);
 
-        return DB::transaction(function () use ($account, $amount, $depositAddress, $paymentDetails, $network, $actor, $program, $programVersion) {
+        return DB::transaction(function () use ($account, $amount, $depositAddress, $paymentDetails, $network, $actor, $program, $programVersion, $effectiveTerms) {
             $request = DepositRequest::create([
                 'investor_id' => $account->investor_id,
                 'investment_account_id' => $account->id,
@@ -210,6 +213,8 @@ class DepositRequestService
                     'lock_months' => $programVersion->lock_months,
                     'partial_withdrawal_allowed' => $program->is_partial_withdrawal_allowed,
                 ],
+                'effective_terms_source' => $effectiveTerms['source'] ?? null,
+                'effective_terms_snapshot' => $effectiveTerms,
                 'payment_details_snapshot' => $paymentDetails === null ? null : $this->paymentDetailsSnapshot($paymentDetails),
                 'requested_amount' => $amount,
                 'currency' => $account->currency,
@@ -282,7 +287,14 @@ class DepositRequestService
                     'net_amount' => (string) $request->net_investment_amount,
                 ];
             $programVersion = null;
-            if ($program !== null) {
+            $effectiveTerms = $request->effective_terms_snapshot;
+            if ($effectiveTerms !== null) {
+                $monthlyRate = $effectiveTerms['rate'];
+                $lockMonths = (int) $effectiveTerms['term_months'];
+                $accrualStartDate ??= $date->copy();
+                $programVersion = isset($request->investment_program_snapshot['version_id']) ? InvestmentProgramVersion::find($request->investment_program_snapshot['version_id']) : null;
+                $term = null;
+            } elseif ($program !== null) {
                 $programs = app(InvestmentProgramService::class);
                 $programs->assertAmount($program, $fee['net_amount'], $request->currency);
                 $programVersion = $programs->activeVersion($program, $date)
@@ -292,7 +304,7 @@ class DepositRequestService
                 $term = $this->confirmationPreflight($request, $date)['term'];
             }
 
-            if ($term !== null) {
+            if ($effectiveTerms === null && $term !== null) {
                 $monthlyRate = $term->monthly_rate;
                 $lockMonths = $term->lock_months;
                 $accrualStartDate ??= $date->copy();
@@ -300,10 +312,14 @@ class DepositRequestService
                 throw new DomainException('Explicit lot terms are required when no account term is active.');
             }
 
-            $unlockDate ??= $lockMonths > 0 ? $accrualStartDate->copy()->addMonthsNoOverflow($lockMonths) : null;
+            $unlockDate ??= ($effectiveTerms['lock_days'] ?? null) !== null
+                ? $accrualStartDate->copy()->addDays((int) $effectiveTerms['lock_days'])
+                : ($lockMonths > 0 ? $accrualStartDate->copy()->addMonthsNoOverflow($lockMonths) : null);
             $lot = InvestmentLot::create([
                 'investment_account_id' => $request->investment_account_id,
                 'deposit_request_id' => $request->id,
+                'effective_terms_source' => $request->effective_terms_source,
+                'effective_terms_snapshot' => $request->effective_terms_snapshot,
                 'original_amount' => $fee['net_amount'],
                 'remaining_amount' => $fee['net_amount'],
                 'currency' => $request->currency,

@@ -21,10 +21,15 @@ class Programs extends Component
 
     public function render()
     {
+        $today=Carbon::today();
         $currency=auth()->user()->investor?->investmentAccounts()->where('status','active')->value('currency')??'USDT';
         $programs=InvestmentProgram::query()->where('status','active')->where('currency',$currency)
-            ->whereHas('versions',fn($query)=>$query->activeOn(Carbon::today()))
-            ->with(['versions'=>fn($query)=>$query->activeOn(Carbon::today())->latest('valid_from')->latest('id')])->orderBy('min_amount')->get();
-        return view('livewire.investor.programs',compact('programs','currency'))->title('Доступные программы — CEO Money');
+            ->whereHas('versions',fn($query)=>$query->activeOn($today))
+            ->with(['versions'=>fn($query)=>$query->activeOn($today)->latest('valid_from')->latest('id')])->orderBy('min_amount')->get();
+        $individualTerms=auth()->user()->investorInvestmentTerms()->active()
+            ->whereHas('versions',fn($query)=>$query->validForDate($today)->where('currency',$currency))
+            ->with(['versions'=>fn($query)=>$query->validForDate($today)->where('currency',$currency)->latest('valid_from')->latest('id')])
+            ->latest('id')->get();
+        return view('livewire.investor.programs',compact('programs','currency','individualTerms'))->title('Доступные программы — CEO Money');
     }
 }

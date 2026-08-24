@@ -13,7 +13,7 @@ class DepositRequest extends Model
     use HasFactory;
 
     protected $fillable = [
-        'investor_id', 'investment_account_id', 'investment_program_id', 'investment_program_snapshot', 'payment_details_snapshot', 'requested_amount', 'received_amount',
+        'investor_id', 'investment_account_id', 'investment_program_id', 'investment_program_snapshot', 'effective_terms_source', 'effective_terms_snapshot', 'payment_details_snapshot', 'requested_amount', 'received_amount',
         'currency', 'network', 'deposit_address_id', 'deposit_address_snapshot',
         'provider_snapshot', 'txid', 'fee_rule_id', 'fee_amount', 'fee_payer', 'fee_economic_type_snapshot',
         'net_investment_amount', 'status', 'requested_at', 'submitted_at', 'submitted_by',
@@ -29,6 +29,7 @@ class DepositRequest extends Model
             'fee_amount' => 'decimal:8',
             'net_investment_amount' => 'decimal:8',
             'investment_program_snapshot' => 'array',
+            'effective_terms_snapshot' => 'array',
             'payment_details_snapshot' => 'array',
             'requested_at' => 'datetime',
             'submitted_at' => 'datetime',

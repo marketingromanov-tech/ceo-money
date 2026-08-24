@@ -106,10 +106,12 @@
                     @endphp
 
                     @if ($selectedDeposit->status === 'submitted')
-                        @php $preflightTerm = $confirmationPreflight['term'] ?? null; @endphp
-                        <div class="mb-5 rounded-xl border {{ $preflightTerm ? 'border-cyan-300/15 bg-cyan-300/[.05]' : 'border-amber-300/20 bg-amber-300/[.06]' }} p-4">
+                        @php $preflightTerm = $confirmationPreflight['term'] ?? null; $effectiveTerms = $confirmationPreflight['effective_terms'] ?? null; @endphp
+                        <div class="mb-5 rounded-xl border {{ ($preflightTerm||$effectiveTerms) ? 'border-cyan-300/15 bg-cyan-300/[.05]' : 'border-amber-300/20 bg-amber-300/[.06]' }} p-4">
                             <h3 class="text-sm font-semibold">Условия новой инвестиции</h3>
-                            @if ($preflightTerm)
+                            @if ($effectiveTerms)
+                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><dt class="text-xs text-[#9080ba]">Источник</dt><dd class="mt-1 text-white">{{ $effectiveTerms['source']==='individual'?'Индивидуальные условия':'Инвестиционная программа' }}</dd></div><div><dt class="text-xs text-[#9080ba]">Ставка</dt><dd class="mt-1 text-white">{{ \App\Support\InvestmentTermPresentation::rate($effectiveTerms['rate']) }} в месяц</dd></div><div><dt class="text-xs text-[#9080ba]">Срок</dt><dd class="mt-1 text-white">{{ $effectiveTerms['term_months'] }} мес.</dd></div></dl>
+                            @elseif ($preflightTerm)
                                 <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
                                     <div><dt class="text-xs text-[#9080ba]">Ставка</dt><dd class="mt-1 text-white">{{ \App\Support\InvestmentTermPresentation::rate($preflightTerm->monthly_rate) }} в месяц</dd></div>
                                     <div><dt class="text-xs text-[#9080ba]">Капитал доступен к выводу через</dt><dd class="mt-1 text-white">{{ \App\Support\InvestmentTermPresentation::lockMonths($preflightTerm->lock_months) }}</dd></div>

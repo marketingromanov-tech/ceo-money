@@ -85,7 +85,7 @@
                     @endphp
                     <article x-data="{ expanded: false }" class="overflow-hidden rounded-xl border transition {{ $lot->status === 'closed' ? 'border-white/[.04] bg-[#2c2735]/65' : 'border-white/[.06] bg-white/[.025]' }} hover:border-purple-300/15 hover:bg-white/[.04]">
                         <button type="button" x-on:click="expanded = ! expanded" x-bind:aria-expanded="expanded.toString()" aria-controls="{{ $detailId }}" class="grid w-full cursor-pointer gap-3 p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-300/60 lg:grid-cols-[minmax(180px,1.35fr)_minmax(145px,1fr)_80px_120px_minmax(175px,1.25fr)_28px] lg:items-center lg:gap-4">
-                            <span><span class="block text-sm font-semibold text-white">Инвестиция №{{ $lot->display_number }}</span><span class="mt-1 block text-[11px] font-medium text-cyan-200">{{ $lot->display_source }}</span></span>
+                            <span><span class="block text-sm font-semibold text-white">Инвестиция №{{ $lot->display_number }}</span><span class="mt-1 block text-[11px] font-medium text-cyan-200">{{ $lot->display_source }}</span><span class="mt-1 block text-[10px] text-[#9183a2]">Источник условий: {{ $lot->display_terms_source }}</span></span>
                             <span class="flex items-baseline justify-between gap-3 lg:block"><span class="text-[10px] uppercase tracking-wide text-[#81748f] lg:hidden">Текущий капитал</span><span class="font-semibold text-white">{{ MoneyFormatter::format($lot->remaining_amount) }} <span class="text-[10px] font-normal text-[#81758e]">USDT</span></span></span>
                             <span class="flex items-center justify-between gap-3 text-sm lg:block"><span class="text-[10px] uppercase tracking-wide text-[#81748f] lg:hidden">Ставка</span><span>{{ MoneyFormatter::format($lot->monthly_rate) }}%</span></span>
                             <span class="flex items-center justify-between gap-3 text-sm text-[#b1a6bb] lg:block"><span class="text-[10px] uppercase tracking-wide text-[#81748f] lg:hidden">Начисления с</span><span>{{ $lot->accrual_start_date->format('d.m.Y') }}</span></span>
@@ -93,11 +93,12 @@
                             <svg viewBox="0 0 24 24" class="hidden size-4 transition-transform lg:block" x-bind:class="expanded && 'rotate-180'" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 10 5 5 5-5"/></svg>
                         </button>
                         <div x-cloak x-show="expanded" id="{{ $detailId }}" class="border-t border-white/[.05] bg-[#292234]/70 px-4 py-4">
-                            <dl class="grid gap-4 text-xs sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                            <dl class="grid gap-4 text-xs sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
                                 @foreach([
                                     ['Первоначальная сумма', MoneyFormatter::format($lot->original_amount).' USDT'],
                                     ['Текущий капитал', MoneyFormatter::format($lot->remaining_amount).' USDT'],
-                                    ['Источник', $lot->display_source],
+                                    ['Источник инвестиции', $lot->display_source],
+                                    ['Источник условий', $lot->display_terms_source],
                                     ['Ставка', MoneyFormatter::format($lot->monthly_rate).'%'],
                                     ['Начало начислений', $lot->accrual_start_date->format('d.m.Y')],
                                     ['Дата разблокировки', $lot->unlock_date?->format('d.m.Y') ?? 'Без блокировки'],

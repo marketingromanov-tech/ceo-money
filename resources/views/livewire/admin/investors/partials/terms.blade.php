@@ -3,6 +3,9 @@
         <div class="rounded-2xl border border-cyan-300/20 bg-cyan-300/[.07] px-4 py-3 text-xs text-cyan-200">{{ session('status') }}</div>
     @endif
 
+    @include('livewire.admin.investors.partials.effective-terms')
+    @include('livewire.admin.investors.partials.individual-terms')
+
     <article class="overflow-hidden rounded-[20px] border border-white/[.07] bg-[#3c354a]">
         <header class="flex flex-col gap-3 border-b border-white/[.06] bg-[#332c42] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div><h3 class="text-sm font-semibold text-white">Текущие условия</h3><p class="mt-1 text-[10px] text-[#9080ba]">Условия инвестиционного счёта, действующие сегодня</p></div>

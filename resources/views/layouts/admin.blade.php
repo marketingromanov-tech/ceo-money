@@ -14,6 +14,7 @@
             ['Обращения', 'admin.inbox.index', '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3v-4a4 4 0 0 1-2-3V7a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v8Z"/>'],
             ['Инвесторы', 'admin.investors.index', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'],
             ['Инвестиционные программы', 'admin.investment-programs.index', '<path d="M4 5h16v14H4zM8 9h8M8 13h5"/>'],
+            ['Индивидуальные условия', 'admin.investor-investment-terms.index', '<path d="M4 6h16M4 12h16M4 18h10M8 3v6M16 9v6M10 15v6"/>'],
             ['Пополнения', 'admin.deposits.index', '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'],
             ['Выводы', 'admin.withdrawals.index', '<path d="M12 21V9M17 14l-5-5-5 5M5 3h14"/>'],
             ['Начисления', 'admin.accruals.index', '<path d="M3 17l5-5 4 4 8-9M16 7h4v4"/>'],
@@ -26,6 +27,7 @@
         $section = match(true) {
             request()->routeIs('admin.investors.*') => 'Инвесторы',
             request()->routeIs('admin.investment-programs.*') => 'Инвестиционные программы',
+            request()->routeIs('admin.investor-investment-terms.*') => 'Индивидуальные условия',
             request()->routeIs('admin.deposits.*') => 'Пополнения',
             request()->routeIs('admin.withdrawals.*') => 'Выводы',
             request()->routeIs('admin.accruals.*') => 'Начисления',

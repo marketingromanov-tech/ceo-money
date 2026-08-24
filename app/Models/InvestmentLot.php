@@ -18,6 +18,8 @@ class InvestmentLot extends Model
         'investment_program_id',
         'investment_program_name_snapshot',
         'investment_program_version_snapshot',
+        'effective_terms_source',
+        'effective_terms_snapshot',
         'original_amount',
         'remaining_amount',
         'currency',
@@ -39,6 +41,7 @@ class InvestmentLot extends Model
             'unlock_date' => 'date',
             'lock_months' => 'integer',
             'monthly_rate' => 'decimal:4',
+            'effective_terms_snapshot' => 'array',
         ];
     }
 

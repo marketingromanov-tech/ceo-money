@@ -10,13 +10,17 @@ use App\Models\InvestmentTransaction;
 use App\Models\InvestmentTerm;
 use App\Models\Investor;
 use App\Models\InvestorPaymentDetail;
+use App\Models\InvestorInvestmentTerm;
+use App\Models\InvestorInvestmentTermVersion;
 use App\Models\WithdrawalRequest;
 use App\Services\AccrualCalculator;
 use App\Services\AvailableBalanceService;
 use App\Services\InvestmentTermService;
 use App\Services\InvestorWithdrawalDetailService;
+use App\Services\InvestorInvestmentTermService;
 use Carbon\Carbon;
 use DomainException;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use App\Livewire\Concerns\RequiresRecentAdminAuthentication;
@@ -50,6 +54,19 @@ class Show extends Component
     public bool $showWithdrawalDetailForm = false;
     public ?int $selectedWithdrawalDetailId = null;
     public ?string $walletConversionMessage = null;
+    public bool $showIndividualTermForm = false;
+    public ?int $editingIndividualTermId = null;
+    public string $individualCurrency = 'USDT';
+    public string $individualMinAmount = '';
+    public string $individualMaxAmount = '';
+    public string $individualMonthlyRate = '';
+    public int|string $individualTermMonths = '';
+    public int|string $individualLockDays = '';
+    public bool $individualPartialWithdrawal = false;
+    public string $individualStartsAt = '';
+    public string $individualEndsAt = '';
+    public string $individualStatus = 'active';
+    public string $individualNotes = '';
 
     public function mount(Investor $investor): void
     {
@@ -230,6 +247,57 @@ class Show extends Component
         session()->flash('status', 'Новые условия сохранены.');
     }
 
+    public function openIndividualTermForm(?int $id = null): void
+    {
+        $this->resetValidation();$this->editingIndividualTermId = $id;$this->showIndividualTermForm = true;
+        if ($id === null) {
+            $this->individualCurrency = $this->investor->investmentAccounts()->value('currency') ?? 'USDT';
+            $this->individualMinAmount = '';$this->individualMaxAmount = '';$this->individualMonthlyRate = '';$this->individualTermMonths = '';$this->individualLockDays = '';$this->individualPartialWithdrawal = false;$this->individualStartsAt = now()->toDateString();$this->individualEndsAt = '';$this->individualStatus = 'active';$this->individualNotes = '';
+            return;
+        }
+        $term = InvestorInvestmentTerm::query()->where('investor_id', $this->investor->user_id)->findOrFail($id);
+        $version = $term->versions()->firstOrFail();
+        $this->individualCurrency = $version->currency;$this->individualMinAmount = (string) ($version->min_amount ?? '');$this->individualMaxAmount = (string) ($version->max_amount ?? '');$this->individualMonthlyRate = (string) $version->monthly_rate;$this->individualTermMonths = $version->term_months;$this->individualLockDays = $version->lock_days ?? '';$this->individualPartialWithdrawal = $version->partial_withdrawal;$this->individualStartsAt = $version->valid_from->copy()->addDay()->max(now()->startOfDay())->toDateString();$this->individualEndsAt = '';$this->individualStatus = $term->status;$this->individualNotes = (string) $version->notes;
+    }
+
+    public function closeIndividualTermForm(): void
+    {
+        $this->showIndividualTermForm = false;$this->editingIndividualTermId = null;$this->resetValidation();
+    }
+
+    public function saveIndividualTerm(InvestorInvestmentTermService $service): void
+    {
+        if (! $this->requireRecentAdminAuthentication()) return;
+        $data = $this->validate([
+            'individualCurrency' => ['required', 'string', 'max:12'],
+            'individualMinAmount' => ['nullable', 'decimal:0,8', 'min:0'],
+            'individualMaxAmount' => ['nullable', 'decimal:0,8'],
+            'individualMonthlyRate' => ['required', 'decimal:0,4', 'gt:0'],
+            'individualTermMonths' => ['required', 'integer', 'gt:0'],
+            'individualLockDays' => ['nullable', 'integer', 'min:0'],
+            'individualPartialWithdrawal' => ['boolean'],
+            'individualStartsAt' => ['required', 'date'],
+            'individualEndsAt' => ['nullable', 'date', 'after_or_equal:individualStartsAt'],
+            'individualStatus' => ['required', Rule::in(['active', 'inactive'])],
+            'individualNotes' => ['nullable', 'string', 'max:5000'],
+        ]);
+        $attributes = ['currency' => strtoupper($data['individualCurrency']), 'min_amount' => $data['individualMinAmount'] ?: null, 'max_amount' => $data['individualMaxAmount'] ?: null, 'monthly_rate' => $data['individualMonthlyRate'], 'term_months' => (int) $data['individualTermMonths'], 'lock_days' => $data['individualLockDays'] === '' ? null : (int) $data['individualLockDays'], 'partial_withdrawal' => $data['individualPartialWithdrawal'], 'starts_at' => $data['individualStartsAt'], 'ends_at' => $data['individualEndsAt'] ?: null, 'status' => $data['individualStatus'], 'notes' => $data['individualNotes'] ?: null];
+        try {
+            if ($this->editingIndividualTermId) $service->update(InvestorInvestmentTerm::query()->where('investor_id', $this->investor->user_id)->findOrFail($this->editingIndividualTermId), $attributes, auth()->user());
+            else $service->create($this->investor->user, $attributes, auth()->user());
+        } catch (DomainException $exception) {
+            $this->addError('individualMaxAmount', $exception->getMessage());return;
+        }
+        $this->closeIndividualTermForm();session()->flash('status', 'Индивидуальные условия сохранены.');
+    }
+
+    public function deactivateIndividualTerm(int $id, InvestorInvestmentTermService $service): void
+    {
+        if (! $this->requireRecentAdminAuthentication()) return;
+        $term = InvestorInvestmentTerm::query()->where('investor_id', $this->investor->user_id)->findOrFail($id);
+        $service->deactivate($term, auth()->user());
+    }
+
     public function previousMonth(): void { $this->selectedMonth = Carbon::createFromFormat('Y-m', $this->selectedMonth)->subMonth()->format('Y-m'); }
     public function nextMonth(): void { $this->selectedMonth = Carbon::createFromFormat('Y-m', $this->selectedMonth)->addMonth()->format('Y-m'); }
 
@@ -242,6 +310,21 @@ class Show extends Component
         $terms = $primaryAccount?->investmentTerms()->whereNull('investment_lot_id')
             ->with('creator')->orderByDesc('valid_from')->orderByDesc('id')->get() ?? collect();
         $currentTerm = $primaryAccount ? $this->currentAccountTerm($primaryAccount->id, $today) : null;
+        $currentIndividualTerm = InvestorInvestmentTermVersion::query()
+            ->whereHas('term', fn ($query) => $query->where('investor_id', $this->investor->user_id)->active())
+            ->validForDate($today)->where('currency', $primaryAccount?->currency ?? 'USDT')
+            ->latest('valid_from')->latest('id')->first();
+        $effectiveTermsDisplay = $currentIndividualTerm ? [
+            'source' => 'Individual Investor Term',
+            'rate' => (string) $currentIndividualTerm->monthly_rate,
+            'term_months' => $currentIndividualTerm->term_months,
+            'status' => 'Активно',
+        ] : [
+            'source' => 'Investment Program',
+            'rate' => $currentTerm ? (string) $currentTerm->monthly_rate : null,
+            'term_months' => $currentTerm?->lock_months,
+            'status' => $currentTerm ? 'Активно' : 'Не настроено',
+        ];
         $month = Carbon::createFromFormat('Y-m', $this->selectedMonth)->startOfMonth();
         $sum = fn ($query, string $column) => (string) ($query->sum($column) ?: '0');
         $capital = $sum(InvestmentLot::whereIn('investment_account_id', $accountIds), 'remaining_amount');
@@ -292,6 +375,8 @@ class Show extends Component
             'accrualChartPoints' => $this->chartPoints($chartValues),
             'currentTerm' => $currentTerm,
             'terms' => $terms,
+            'individualTerms' => InvestorInvestmentTerm::query()->where('investor_id', $this->investor->user_id)->with(['createdByAdmin', 'versions.createdByAdmin'])->latest('id')->get(),
+            'effectiveTermsDisplay' => $effectiveTermsDisplay,
             'paymentDetails' => $this->investor->paymentDetails()->latest('id')->get(),
             'investorWallets' => $this->investor->wallets()->latest('created_at')->latest('id')->get(),
             'withdrawalDetails' => $this->investor->withdrawalDetails()->latest('id')->get(),

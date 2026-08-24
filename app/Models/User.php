@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -62,5 +63,15 @@ class User extends Authenticatable
     public function investor(): HasOne
     {
         return $this->hasOne(Investor::class);
+    }
+
+    public function investorInvestmentTerms(): HasMany
+    {
+        return $this->hasMany(InvestorInvestmentTerm::class, 'investor_id');
+    }
+
+    public function createdInvestorInvestmentTerms(): HasMany
+    {
+        return $this->hasMany(InvestorInvestmentTerm::class, 'created_by_admin_id');
     }
 }

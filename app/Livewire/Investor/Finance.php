@@ -60,6 +60,11 @@ class Finance extends Component
                 $activeLots++;
             }
             $lot->setAttribute('display_number', $index + 1);
+            $lot->setAttribute('display_terms_source', match ($lot->effective_terms_source) {
+                'individual' => 'Individual Investor Term',
+                'program' => 'Investment Program',
+                default => 'Legacy investment terms',
+            });
             $lot->setAttribute('display_source', $lot->dividendCapitalization ? 'Капитализация дивидендов' : 'Пополнение');
             $lot->setAttribute('is_withdrawable', $lot->status === 'active'
                 && $decimal->compare((string) $lot->remaining_amount, '0') > 0
