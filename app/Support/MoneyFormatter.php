@@ -24,6 +24,11 @@ class MoneyFormatter
         return $negative && trim(str_replace([' ', '.'], '', $formatted), '0') !== '' ? '-'.$formatted : $formatted;
     }
 
+    public static function input(string|int|null $value, int $scale = 2): string
+    {
+        return str_replace(' ', '', self::format($value, $scale));
+    }
+
     private static function increment(string $whole, string $fraction): array
     {
         $digits = $whole.$fraction;

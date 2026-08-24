@@ -8,15 +8,13 @@
                 @foreach($individualTerms as $term)
                     @php
                         $version=$term->versions->first();
-                        $entryAmount=(string)($version->min_amount??$programs->first()?->min_amount??'0');
-                        $entryProgram=$programs->first(fn($item)=>bccomp($entryAmount,(string)$item->min_amount,8)>=0&&($item->max_amount===null||bccomp($entryAmount,(string)$item->max_amount,8)<=0))??$programs->first();
                     @endphp
                     <div><p class="text-xs text-[#9183a2]">Ставка</p><b>{{ \App\Support\InvestmentTermPresentation::rate((string)$version->monthly_rate) }} в месяц</b></div>
                     <div><p class="text-xs text-[#9183a2]">Срок</p><b>{{ $version->term_months }} месяцев</b></div>
                     <div><p class="text-xs text-[#9183a2]">Валюта</p><b>{{ $version->currency }}</b></div>
                     <div><p class="text-xs text-[#9183a2]">Минимальная сумма</p><b>{{ $version->min_amount===null?'Без ограничения':\App\Support\MoneyFormatter::format($version->min_amount) }}</b></div>
                     <div><p class="text-xs text-[#9183a2]">Частичный вывод</p><b>{{ $version->partial_withdrawal?'Да':'Нет' }}</b></div>
-                    <div class="flex items-end">@if($entryProgram)<a href="{{ route('investor.finance.create',['investment_program_id'=>$entryProgram->id,'amount'=>$entryAmount]) }}" class="w-full rounded-xl bg-gradient-to-r from-[#49a9c8] to-[#7672ea] px-4 py-3 text-center text-sm font-semibold text-white">Создать инвестицию</a>@endif</div>
+                    <div class="flex items-end"><a href="{{ route('investor.finance.create',['individual_term_id'=>$term->id]) }}" wire:navigate class="w-full cursor-pointer rounded-xl bg-gradient-to-r from-[#ac6aec] to-[#6875e9] px-4 py-3 text-center text-sm font-semibold text-white transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60">Создать инвестицию</a></div>
                 @endforeach
             </div>
         </section>

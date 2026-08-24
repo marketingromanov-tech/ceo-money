@@ -229,7 +229,7 @@ class InvestmentProgramTest extends TestCase
         $this->seed();$user=User::where('email','alexey@example.com')->firstOrFail();$program=InvestmentProgram::where('slug','advanced')->firstOrFail();$requests=DepositRequest::count();
         $wizard=Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$program->id)->set('amount','4000')->assertSet('step',1);
         $this->assertSame($requests,DepositRequest::count());
-        $wizard->call('useMinimum')->assertSet('amount','5000.00000000')->assertSet('step',2)->assertSee('5 000.00 USDT')->assertSee('Прогноз дохода');
+        $wizard->call('useMinimum')->assertSet('amount','5000.00')->assertSet('step',2)->assertSee('5 000.00 USDT')->assertSee('Прогноз дохода');
         $this->assertSame($requests,DepositRequest::count());
         $wizard->call('submit')->assertSet('step',3);
         $this->assertSame($requests+1,DepositRequest::count());
