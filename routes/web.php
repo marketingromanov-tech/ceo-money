@@ -24,6 +24,7 @@ use App\Livewire\Admin\Inbox\Index as AdminInboxIndex;
 use App\Livewire\Admin\InvestmentPrograms\Index as InvestmentProgramsIndex;
 use App\Livewire\Admin\Notifications\Index as AdminNotificationsIndex;
 use App\Livewire\Admin\Settings\Index as AdminSettingsIndex;
+use App\Livewire\Admin\Administrators\Index as AdminAdministratorsIndex;
 use App\Livewire\Investor\Programs as InvestorPrograms;
 use App\Livewire\Investor\CreateDeposit as InvestorCreateDeposit;
 use Illuminate\Support\Facades\Route;
@@ -76,5 +77,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/investment-programs', InvestmentProgramsIndex::class)->name('investment-programs.index');
         Route::get('/notifications', AdminNotificationsIndex::class)->name('notifications.index');
         Route::get('/settings', AdminSettingsIndex::class)->name('settings.index');
+        Route::get('/administrators', AdminAdministratorsIndex::class)->name('administrators.index');
     });
 });

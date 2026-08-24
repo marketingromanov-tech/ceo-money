@@ -61,16 +61,28 @@ class CreateDeposit extends Component
     {
         $program = $this->availableProgram();
         $version = $program ? $programs->activeVersion($program, Carbon::today()) : null;
-        $projection = null;$belowMinimum=false;$aboveMaximum=false;$shortfall=null;
+        $projection = null;$belowMinimum=false;$aboveMaximum=false;$shortfall=null;$suggestedPrograms=collect();
         $validAmount=preg_match('/^\d+(?:\.\d{1,8})?$/',$this->amount)===1;
         if($program&&$validAmount){$belowMinimum=$decimal->compare($this->amount,(string)$program->min_amount)<0;$aboveMaximum=$program->max_amount!==null&&$decimal->compare($this->amount,(string)$program->max_amount)>0;if($belowMinimum)$shortfall=$decimal->subtract((string)$program->min_amount,$this->amount);}
+        if ($program && $aboveMaximum) {
+            $suggestedPrograms = InvestmentProgram::query()
+                ->whereKeyNot($program->id)
+                ->where('status', 'active')
+                ->where('currency', $this->account()->currency)
+                ->where('min_amount', '<=', $this->amount)
+                ->where(fn ($query) => $query->whereNull('max_amount')->orWhere('max_amount', '>=', $this->amount))
+                ->whereHas('versions', fn ($query) => $query->activeOn(Carbon::today()))
+                ->orderBy('min_amount')
+                ->limit(3)
+                ->get();
+        }
         if ($version && $validAmount && ! $belowMinimum && ! $aboveMaximum) {
             $monthly = $decimal->calculate($this->amount, (string) $version->monthly_rate, 1);
             $period = '0.00000000';
             for ($month=0;$month<$version->lock_months;$month++) $period=$decimal->add($period,$monthly);
             $projection=['monthly'=>$monthly,'period'=>$period];
         }
-        return view('livewire.investor.create-deposit', compact('program','version','projection','belowMinimum','aboveMaximum','shortfall'))->title('Новая заявка — CEO Money');
+        return view('livewire.investor.create-deposit', compact('program','version','projection','belowMinimum','aboveMaximum','shortfall','suggestedPrograms'))->title('Новая заявка — CEO Money');
     }
 
     private function validateSelection(InvestmentProgramService $programs, AccrualCalculator $decimal): ?InvestmentProgram

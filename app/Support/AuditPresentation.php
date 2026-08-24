@@ -16,12 +16,17 @@ use App\Models\Investor;
 use App\Models\WithdrawalRequest;
 use App\Models\WithdrawalVerificationCheck;
 use App\Models\SupportTicket;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class AuditPresentation
 {
     private const ACTIONS = [
+        'admin.created'=>['Создан администратор','administrative'],
+        'admin.activated'=>['Администратор активирован','administrative'],
+        'admin.deactivated'=>['Администратор деактивирован','administrative'],
+        'admin.password_reset'=>['Пароль администратора сброшен','administrative'],
         'investment_program.created'=>['Создана инвестиционная программа','administrative'],
         'investment_program.updated'=>['Изменена инвестиционная программа','administrative'],
         'investment_program.archived'=>['Инвестиционная программа архивирована','administrative'],
@@ -53,6 +58,7 @@ class AuditPresentation
     ];
 
     private const OBJECTS = [
+        User::class=>'Администратор',
         InvestmentProgram::class=>'Инвестиционная программа',
         FeeRule::class=>'Правило комиссии', InvestmentTerm::class=>'Условия инвестирования', InvestorWallet::class=>'Кошелёк инвестора',
         DepositAddress::class=>'Адрес пополнения', DepositRequest::class=>'Заявка на пополнение', DepositVerificationCheck::class=>'Проверка пополнения', WithdrawalRequest::class=>'Заявка на вывод', WithdrawalVerificationCheck::class=>'Проверка выплаты', Investor::class=>'Инвестор', InvestmentTransaction::class=>'Финансовая операция',

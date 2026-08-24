@@ -135,7 +135,7 @@ class InvestmentProgramTest extends TestCase
         Livewire::actingAs($user)->test(Programs::class)->call('selectProgram',$program->id)->assertRedirect(route('investor.finance.create',['investment_program_id'=>$program->id]));
         $this->assertSame($requests,DepositRequest::count());
         $this->actingAs($user)->get(route('investor.finance.create',['investment_program_id'=>$program->id]))->assertOk()->assertSee('Advanced')->assertSee('Сумма инвестиции');
-        $wizard=Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$program->id)->set('amount','7000')->assertSee('210.00 USDT / месяц')->assertSee('1 260.00 USDT')->call('review')->assertSet('step',2)->assertSee('Проверьте данные');
+        $wizard=Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$program->id)->set('amount','7000')->assertSee('Сумма подходит для этой программы')->assertSee('210.00 USDT / месяц')->assertSee('1 260.00 USDT')->call('review')->assertSet('step',2)->assertSee('Проверьте данные')->assertSee('Прогноз дохода')->assertSee('1 260.00 USDT');
         $this->assertSame($requests,DepositRequest::count());
         $wizard->call('submit')->assertSet('step',3)->assertSee('Заявка создана')->assertSee('Ожидает пополнения');
         $request=DepositRequest::latest('id')->firstOrFail();$this->assertSame($program->id,$request->investment_program_id);$this->assertSame('7000.00000000',$request->requested_amount);$this->assertSame('pending',$request->status);
@@ -216,12 +216,24 @@ class InvestmentProgramTest extends TestCase
     {
         $this->seed();$user=User::where('email','alexey@example.com')->firstOrFail();$advanced=InvestmentProgram::where('slug','advanced')->firstOrFail();
         Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$advanced->id)->set('amount','4000')->assertSee('Минимальная инвестиция для программы Advanced — 5 000 USDT')->assertSee('Ваша сумма — 4 000.00 USDT')->assertSee('Необходимо добавить 1 000.00 USDT')->assertSee('Инвестировать 5 000 USDT')->call('review')->assertHasErrors('amount');
-        Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$advanced->id)->set('amount','12000')->assertSee('Максимальная сумма программы — 9 999 USDT')->assertSee('Выбрать другую программу');
+        Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$advanced->id)->set('amount','12000')->assertSee('Максимальная сумма программы — 9 999 USDT')->assertSee('Для этой суммы подойдут:')->assertSee('Premium')->assertSee('Выбрать другую программу');
         $advanced->update(['status'=>'archived']);Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$advanced->id)->set('amount','7000')->call('review')->assertHasErrors('program')->assertSee('Программа больше недоступна');
         $foreign=InvestmentProgram::create(['name'=>'Foreign','slug'=>'foreign','status'=>'active','currency'=>'USDC','min_amount'=>'1000','max_amount'=>'9999','is_partial_withdrawal_allowed'=>true]);app(InvestmentProgramService::class)->createVersion($foreign,'3',3,Carbon::parse('2026-01-01'),User::where('role','admin')->first());
         Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$foreign->id)->set('amount','3000')->call('review')->assertHasErrors('program');
         $noVersion=InvestmentProgram::create(['name'=>'No version','slug'=>'no-version','status'=>'active','currency'=>'USDT','min_amount'=>'1000','max_amount'=>'9999','is_partial_withdrawal_allowed'=>true]);Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$noVersion->id)->set('amount','3000')->call('review')->assertHasErrors('program');
         $this->assertDatabaseMissing('deposit_requests',['investment_program_id'=>$foreign->id]);$this->assertDatabaseMissing('deposit_requests',['investment_program_id'=>$noVersion->id]);
+    }
+
+    public function test_deposit_wizard_uses_minimum_only_after_investor_accepts_and_confirms(): void
+    {
+        $this->seed();$user=User::where('email','alexey@example.com')->firstOrFail();$program=InvestmentProgram::where('slug','advanced')->firstOrFail();$requests=DepositRequest::count();
+        $wizard=Livewire::actingAs($user)->test(CreateDeposit::class)->set('investmentProgramId',$program->id)->set('amount','4000')->assertSet('step',1);
+        $this->assertSame($requests,DepositRequest::count());
+        $wizard->call('useMinimum')->assertSet('amount','5000.00000000')->assertSet('step',2)->assertSee('5 000.00 USDT')->assertSee('Прогноз дохода');
+        $this->assertSame($requests,DepositRequest::count());
+        $wizard->call('submit')->assertSet('step',3);
+        $this->assertSame($requests+1,DepositRequest::count());
+        $this->assertSame('5000.00000000',DepositRequest::latest('id')->value('requested_amount'));
     }
 
     public function test_inactive_program_is_not_visible_to_investor(): void
